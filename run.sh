@@ -30,6 +30,7 @@ STDLIB="stdcxx"
 TARGET_OVERRIDE=""
 NIGGLY_ROOT_DIR="$PPWD/modules/niggly"
 MAKEFILE="run.makefile"
+NPROC="-j$(nproc)"
 
 show_usage()
 {
@@ -122,6 +123,8 @@ while [ "$#" -gt "0" ] ; do
     [ "$1" = "examples" ]  && BUILD_EXAMPLES="True" && shift && continue
     [ "$1" = "coverage" ]  \
         && BUILD_TESTS="True"  && COVERAGE="True" && CONFIG="debug" && shift && continue
+
+    [ "${1:0:2}" = "-j" ]  && NPROC="$1"            && shift && continue
     
     [ "$1" = "--" ]        && shift && break
     
@@ -154,7 +157,7 @@ fi
 
 do_make()
 {
-    make -f "$MAKEFILE" -j$(nproc) $RULE
+    make -f "$MAKEFILE" $NPROC $RULE
     RET="$?"
     [ "$RET" != "0" ] && exit $RET   || true
 }

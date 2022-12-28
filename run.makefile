@@ -1,23 +1,24 @@
 
 # These will be set from the outside
 TARGET?=grpc-p2300
-VERBOSE?="False"
+VERBOSE?=False
 
 # Affects build environment variables; @see build-env.sh
 TOOLCHAIN?=gcc
 BUILD_CONFIG?=release
 CXXSTD?=-std=c++2b
-UNITY_BUILD?="False"
-BUILD_TESTS?="False"
-BUILD_EXAMPLES?="False"
-BENCHMARK?="False"
-COVERAGE?="False"
-STDLIB?="stdcxx"
-LTO?="False"
+UNITY_BUILD?=False
+BUILD_TESTS?=False
+BUILD_EXAMPLES?=False
+BENCHMARK?=False
+COVERAGE?=False
+STDLIB?=stdcxx
+LTO?=False
+GEN_DIR?=build/generated
 
 # ----------------------------------------------------------------------------- Set base build flags
 
-INCDIRS:=-Isrc
+INCDIRS:=-Isrc -isystem$(GEN_DIR)
 BOOST_DEFINES:=-DBOOST_NO_TYPEID -DBOOST_ERROR_CODE_HEADER_ONLY -DBOOST_ASIO_SEPARATE_COMPILATION -DBOOST_ASIO_NO_DEPRECATED -DBOOST_ASIO_DISABLE_VISIBILITY
 DEFINES:=$(BOOST_DEFINES) -DUSE_ASIO
 WARNINGS:=-Wno-variadic-macros
@@ -26,11 +27,21 @@ CFLAGS:=-Isrc
 CPPFLAGS:=
 CXXFLAGS:=-Isrc -DFMT_HEADER_ONLY
 LDFLAGS:=
-LIBS:=-lunifex -lpthread -lssl -lcrypto
+LIBS:=-lunifex -lpthread -lssl -lcrypto -lprotobuf -lgpr -lgrpc -lgrpc++ -labsl
 
 # --------------------------------------------------------------------------- Add Source Directories
 
-SOURCES:=$(shell find src -type f -name '*.cpp' -o -name '*.c')
+PROTOS:=protos/helloworld.proto
+GRPC_PROTOS:=protos/helloworld.proto
+
+# Means that this target must be built
+DEP_LIBS:=libabsl.a
+
+SOURCES:=$(shell find src -type f -name '*.cpp' -o -name '*.cc' -o -name '*.c') 
+
+# Add in the proto/grpc sources
+SOURCES+=$(patsubst %.proto, $(GEN_DIR)/%.pb.cc, $(PROTOS))
+SOURCES+=$(patsubst %.proto, $(GEN_DIR)/%.grpc.pb.cc, $(GRPC_PROTOS))
 
 ifeq ("$(BUILD_TESTS)", "True")
   BASE_SOURCES:=$(SOURCES)
@@ -77,4 +88,11 @@ run: | all
 
 $(TARGET): $(TARGET_DIR)/$(TARGET)
 
-
+$(BUILD_DIR)/lib/libabsl.a: $(shell find $(INSTALL_PREFIX)/lib -type f -name 'libabsl_*.a')
+	@echo "$(BANNER)libabsl.a$(BANEND)"
+	rm -rf $(dir $@)tmp
+	mkdir -p $(dir $@)tmp
+	cd $(dir $@)tmp ; for X in $^ ; do $(AR) -x $$X ; done ; $(AR) -rcs $@ *.o
+	$(RANLIB) $@
+	rm -rf $(dir $@)tmp
+	@$(RECIPETAIL)
