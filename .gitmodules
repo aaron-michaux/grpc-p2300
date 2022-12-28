@@ -1,0 +1,3 @@
+[submodule "modules/niggly"]
+	path = modules/niggly
+	url = git@github.com:aaron-michaux/niggly.git
