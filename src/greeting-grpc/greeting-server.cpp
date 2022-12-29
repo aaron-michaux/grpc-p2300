@@ -16,15 +16,17 @@
  *
  */
 
-#include <iostream>
-#include <memory>
-#include <string>
-#include <thread>
+#include "greeting-server.h"
+
+#include <protos/helloworld.grpc.pb.h>
 
 #include <grpc/support/log.h>
 #include <grpcpp/grpcpp.h>
 
-#include "protos/helloworld.grpc.pb.h"
+#include <iostream>
+#include <memory>
+#include <string>
+#include <thread>
 
 namespace GreetingServer {
 
@@ -161,11 +163,9 @@ class ServerImpl final {
   std::unique_ptr<Server> server_;
 };
 
-int main(int argc, char** argv) {
+void run_server() {
   ServerImpl server;
   server.Run();
-
-  return 0;
 }
 
-}
+} // namespace GreetingServer

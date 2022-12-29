@@ -1,6 +1,11 @@
 
 #include "stdinc.hpp"
 
+#include "greeting-grpc/greeting-client.h"
+#include "greeting-grpc/greeting-server.h"
+
+#include <thread>
+
 // -------------------------------------------------------------------------------------------------
 /**
  * concept scheduler:
@@ -18,4 +23,13 @@
  *    start(operation_state) -> void
  */
 
-int main(int, char**) { return EXIT_SUCCESS; }
+int main(int, char**) {
+
+  std::thread server_thread{GreetingServer::run_server};
+
+  GreetingClient::run_client();
+
+  server_thread.join();
+
+  return EXIT_SUCCESS;
+}
