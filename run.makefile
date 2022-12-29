@@ -20,14 +20,14 @@ GEN_DIR?=build/generated
 
 INCDIRS:=-Isrc -isystem$(GEN_DIR)
 BOOST_DEFINES:=-DBOOST_NO_TYPEID -DBOOST_ERROR_CODE_HEADER_ONLY -DBOOST_ASIO_SEPARATE_COMPILATION -DBOOST_ASIO_NO_DEPRECATED -DBOOST_ASIO_DISABLE_VISIBILITY
-DEFINES:=$(BOOST_DEFINES) -DUSE_ASIO
+DEFINES:=$(BOOST_DEFINES) -DUSE_ASIO -DFMT_HEADER_ONLY
 WARNINGS:=-Wno-variadic-macros
 
-CFLAGS:=-Isrc
+CFLAGS:=$(INCDIRS) $(DEFINES) $(WARNINGS)
 CPPFLAGS:=
-CXXFLAGS:=-Isrc -DFMT_HEADER_ONLY
+CXXFLAGS:=$(INCDIRS) $(DEFINES) $(WARNINGS)
 LDFLAGS:=
-LIBS:=-lunifex -lpthread -lssl -lcrypto -lprotobuf -lgpr -lgrpc -lgrpc++ -labsl
+LIBS:=-lunifex  -lgrpc++ -lgrpc -lgpr -lupb -laddress_sorting -lprotobuf -lre2 -lcares -labsl  -lssl -lcrypto -lz -lpthread 
 
 # --------------------------------------------------------------------------- Add Source Directories
 
@@ -42,6 +42,9 @@ SOURCES:=$(shell find src -type f -name '*.cpp' -o -name '*.cc' -o -name '*.c')
 # Add in the proto/grpc sources
 SOURCES+=$(patsubst %.proto, $(GEN_DIR)/%.pb.cc, $(PROTOS))
 SOURCES+=$(patsubst %.proto, $(GEN_DIR)/%.grpc.pb.cc, $(GRPC_PROTOS))
+
+GEN_HEADERS=$(patsubst %.proto, $(GEN_DIR)/%.pb.h, $(PROTOS))
+GEN_HEADERS+=$(patsubst %.proto, $(GEN_DIR)/%.grpc.pb.h, $(GRPC_PROTOS))
 
 ifeq ("$(BUILD_TESTS)", "True")
   BASE_SOURCES:=$(SOURCES)
@@ -92,7 +95,9 @@ $(BUILD_DIR)/lib/libabsl.a: $(shell find $(INSTALL_PREFIX)/lib -type f -name 'li
 	@echo "$(BANNER)libabsl.a$(BANEND)"
 	rm -rf $(dir $@)tmp
 	mkdir -p $(dir $@)tmp
-	cd $(dir $@)tmp ; for X in $^ ; do $(AR) -x $$X ; done ; $(AR) -rcs $@ *.o
+	cd $(dir $@)tmp ; for X in $^ ; do mkdir $$(basename $$X) ; cd $$(basename $$X) ; $(AR) -x $$X ; cd .. ; done ; $(AR) -rcs $@ */*.o
 	$(RANLIB) $@
 	rm -rf $(dir $@)tmp
 	@$(RECIPETAIL)
+
+
