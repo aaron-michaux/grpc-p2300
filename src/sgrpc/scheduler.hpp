@@ -1,9 +1,11 @@
 
 #pragma once
 
-#include "execution_context.hpp"
+#include "sender.hpp"
 
 namespace sgrpc {
+
+class ExecutionContext;
 
 class Scheduler {
 public:
@@ -14,7 +16,7 @@ public:
   }
   constexpr ExecutionContext& context() const noexcept { return context_; }
 
-  //[[nodiscard]] detail::ScheduleSender schedule() const noexcept;
+  constexpr SchedulerSender schedule() const noexcept { return {context_}; }
 
 private:
   ExecutionContext& context_; // not-owned

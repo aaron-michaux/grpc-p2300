@@ -26,9 +26,7 @@
 int main(int, char**) {
 
   std::thread server_thread{GreetingServer::run_server};
-
   GreetingClient::run_client();
-
   server_thread.join();
 
   return EXIT_SUCCESS;

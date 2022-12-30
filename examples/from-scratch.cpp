@@ -4,6 +4,7 @@
 #include <utility>
 
 // -------------------------------------------------------------------------------------------------
+
 /**
  * concept scheduler:
  *    schedule(scheduler) -> sender
@@ -62,7 +63,7 @@ template <typename Receiver, typename Function> struct then_receiver {
   Function function;
 
   friend void set_value(then_receiver self, auto val) {
-    set_value(self.receiver, self.function(val));
+    set_value(self.receiver, self.function(val)); // set-value on outer-receiver
   }
   friend void set_error(then_receiver self, std::exception_ptr err) {
     set_error(self.receiver, err);
@@ -154,9 +155,7 @@ struct run_loop : immovable {
     Receiver receiver;
     run_loop& loop;
 
-    operation(Receiver receiver, run_loop& loop) : receiver{receiver}, loop{loop} {
-      //
-    }
+    operation(Receiver receiver, run_loop& loop) : receiver{receiver}, loop{loop} {}
 
     void execute() override final { set_value(receiver, none{}); }
 
@@ -273,9 +272,14 @@ void example_3_threaded_execution() {
 
   thread_context th;
   auto sched6 = th.get_scheduler();
-  auto s6 = then(schedule(sched6), [](auto) { return 42; });
+  auto sx = schedule(sched6);
+  auto s6 = then(sx, [](auto) { return 42; });
   auto s7 = then(s6, [](int i) { return i + 1; });
   auto val7 = sync_wait(s7).value();
+
+  // op-state7 contains op-state6, contains op-state-x
+  // When op-state-x set_value(none) => op-state-6.set_value(42) => op-state-7.set_value(43)
+
   th.finish();
   th.join();
 
