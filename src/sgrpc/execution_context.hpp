@@ -1,19 +1,26 @@
 
 #pragma once
 
+#include "detail/atomic-task-stealing-queue.hpp"
+#include "completion-queue-event.hpp"
+
 #include <grpcpp/completion_queue.h>
 
 #include <atomic>
 #include <optional>
+#include <fuctional>
 #include <memory>
 #include <mutex>
 #include <thread>
 
 namespace sgrpc {
 
-enum class ExecutionState : int { Ready, Running, Stopped };
+using thunk_type = std::function<void()>;
+using deadlined_thunk_type = std::function<void(bool)>;
 
-class ExecutionContext {
+enum class ExecutionState : int { Ready = 0, Running, ShuttingDown, Stopped };
+
+class ExecutionContext final {
 public:
   // For tag dispatch in the constructor
   static struct ClientTag {
@@ -22,8 +29,13 @@ public:
   } Server;
 
   //@{ Construction/Destruction
-  explicit ExecutionContext(ClientTag);
-  explicit ExecutionContext(ServerTag);
+  explicit ExecutionContext(unsigned n_queues, unsigned n_threads, ClientTag);
+  explicit ExecutionContext(unsigned n_queues, unsigned n_threads, ServerTag);
+  ExecutionContext(const ExecutionContext&) = delete;
+  ExecutionContext(ExecutionContext&&) = delete;
+  ~ExecutionContext();
+  ExecutionContext& operator=(const ExecutionContext&) = delete;
+  ExecutionContext& operator=(ExecutionContext&&) = delete;
   //@}
 
   //@{ Getters
@@ -31,23 +43,34 @@ public:
   bool is_stopped() const noexcept { return get_state() == ExecutionState::Stopped; }
   bool is_server() const noexcept { return is_server_; }
   bool is_client() const noexcept { return !is_server_; }
-  grpc::CompletionQueue& get_cq() const noexcept { return *cq_; }
-  grpc::ServerCompletionQueue* get_server_cq() const noexcept;
-  bool is_running_in_thread(std::thread::id id) const noexcept;
+  grpc::CompletionQueue& get_cq(unsigned index) const noexcept;
+  grpc::ServerCompletionQueue& get_server_cq(unsigned index) const noexcept;
+  std::size_t size() const noexcept { return cqs_.size(); }
   //@}
 
   //@{ Action!
-  bool run();
-  bool run_while(std::function<bool()> predicate);
-  void stop();
+  bool post(thunk_type thunk);
+  bool post(deadlined_thunk_type thunk, std::chrono::steady_clock::time_point deadline);
+  bool run();                                      //!< Returns immediately
+  bool run_while(std::function<bool()> predicate); //!< Returns immediately
+  void stop();                                     //!< Blocking waits for orderly shutdown
+  void add_notify_at_stopped(std::function<void()> thunk);
   //@}
 
 private:
-  bool set_state(ExecutionState state); //!< True iff successful
+  void init_(unsigned n_queues, unsigned n_threads, bool is_server);
+  bool set_state_(ExecutionState state); //!< True iff successful
+  void run_one_thread_(unsigned thread_number, std::function<bool()> predicate);
 
-  std::unique_ptr<grpc::CompletionQueue> cq_;
+  std::mutex padlock_;
+  std::vector<std::thread> threads_;
+  AtomicTaskStealingQueue<thunk_type> task_queue_; //!< For things not pushed onto cqs_
+  std::vector<std::unique_ptr<grpc::CompletionQueue>> cqs_;
+  std::vector<std::function<void()>> notifications_; //!< For when stopped and drained
   std::atomic<ExecutionState> state_{ExecutionState::Ready};
-  std::optional<std::thread::id> thread_id_{};
+  std::atomic<std::size_t> next_cq_write_index_{0};
+  std::atomic<std::size_t> in_cq_post_{0};
+  unsigned n_threads_{0};
   bool is_server_{false};
 };
 
