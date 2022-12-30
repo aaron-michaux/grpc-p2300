@@ -5,25 +5,24 @@
 
 #include <grpcpp/alarm.h>
 
-namespace sgprc::detail {
+namespace sgrpc::detail {
 
-class Alarm final : public CompletionQueueEvent {
+class Alarm final : public sgrpc::CompletionQueueEvent {
 public:
-  Alarm(gprc::CompletionQueue& cq, std::function<void(bool)> thunk,
-        std::chrono::steady_clock::time_point deadline)
+  Alarm(grpc::CompletionQueue& cq, std::function<void(bool)> thunk, gpr_timespec deadline)
       : thunk_{std::move(thunk)} {
     alarm_.Set(&cq, deadline, this);
   }
 
   void run(bool is_ok) override {
     if (thunk_) {
-      thunk(is_ok);
+      thunk_(is_ok);
     }
   }
 
 private:
   std::function<void(bool)> thunk_;
   grpc::Alarm alarm_;
-}
+};
 
-} // namespace sgprc::detail
+} // namespace sgrpc::detail

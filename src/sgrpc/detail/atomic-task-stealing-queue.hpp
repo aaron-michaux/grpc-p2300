@@ -1,8 +1,14 @@
 
 #pragma once
 
+#include <atomic>
 #include <deque>
+#include <iterator>
+#include <memory>
 #include <mutex>
+#include <vector>
+
+#include <cassert>
 
 namespace sgrpc::detail {
 
@@ -93,7 +99,7 @@ public:
   using value_type = T;
 
 private:
-  std::unique_ptr<OptimisiticLockingQueue<value_type>[]> queues_ = nullptr;
+  std::vector<detail::OptimisiticLockingQueue<value_type>> queues_;
   unsigned n_queues_ = 0;
 
   std::atomic<unsigned> push_index_ = 0; //!< next queue to push to
@@ -110,15 +116,14 @@ public:
    * + `std::bad_alloc` if allocation fails.
    */
   explicit AtomicTaskStealingQueue(unsigned number_queues)
-      : queues_{new OptimisiticLockingQueue[number_queues]}, n_queues_{number_queues}, is_done_{
-                                                                                           false} {}
+      : queues_{number_queues}, n_queues_{number_queues}, is_done_{false} {}
 
   /**
    * @brief Signals that no more elements should be pushed
    *
    * THREAD SAFE
    */
-  std::deque<value_type> signal_done() { is_done_.store(true, std::memory_order_release); }
+  void signal_done() { is_done_.store(true, std::memory_order_release); }
 
   /**
    * @brief Drains the underlying queues, returning all the thunks.
@@ -129,13 +134,13 @@ public:
    */
   std::deque<value_type> stop_and_eject() {
     signal_done();
-    std::atomic_signal_fence(memory_order_acq_rel); // Forbid reordering
+    std::atomic_signal_fence(std::memory_order_acq_rel); // Forbid reordering
     std::deque<value_type> thunks;
     do {
       for (auto i = 0u; i != n_queues_; ++i) {
         auto queue_thunks = queues_[i].eject();
-        thunks.insert(std::end(thunks), std::make_move_iterator(std::begin(queue_thunks))
-                                            std::make_move_iterator(std::end(queue_thunks)));
+        thunks.insert(std::end(thunks), std::make_move_iterator(std::begin(queue_thunks)),
+                      std::make_move_iterator(std::end(queue_thunks)));
       }
     } while (in_push_.load(std::memory_order_acquire) > 0);
     return thunks;
@@ -163,7 +168,7 @@ public:
   bool push(value_type&& thunk) {
     assert(thunk);
     in_push_.fetch_add(1, std::memory_order_acq_rel);
-    std::atomic_signal_fence(memory_order_acq_rel); // Forbid reordering
+    std::atomic_signal_fence(std::memory_order_acq_rel); // Forbid reordering
     bool is_done = done_is_signalled();
     if (!is_done) {
       value_type out_thunk;

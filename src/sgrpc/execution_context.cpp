@@ -1,38 +1,23 @@
 
 #include "execution_context.hpp"
 
+#include "detail/alarm.hpp"
+#include "detail/utils.hpp"
+
 #include <chrono>
 
 namespace sgrpc {
 
 // ------------------------------------------------------------------------ Construction/Destruction
 
-ExecutionContext::ExecutionContext(unsigned n_queues, unsigned n_threads, ClientTag)
-    : task_queue_{2 * n_queues} {
-  init_(n_queues, n_threads, false);
-}
-
-ExecutionContext::ExecutionContext(unsigned n_queues, unsigned n_threads, ServerTag)
-    : task_queue_{2 * n_queues} {
-  init_(n_queues, n_threads, true);
+ExecutionContext::ExecutionContext(unsigned n_threads,
+                                   std::vector<std::unique_ptr<grpc::CompletionQueue>>&& cqs)
+    : task_queue_{n_threads + 1}, cqs_{std::move(cqs)}, n_threads_{n_threads} {
+  assert(n_threads > 0);
+  assert(cqs_.size() > 0);
 }
 
 ExecutionContext::~ExecutionContext() { stop(); }
-
-ExecutionContext::init_(unsigned n_queues, unsigned n_threads, bool is_server) {
-  assert(n_queues > 0);
-  assert(n_threads > 0);
-  cqs_.reserve(n_queues);
-  if (is_server) {
-    for (auto i = 0u; i < n_queues; ++i)
-      cqs_.push_back(std::make_unique<grpc::CompletionQueue>());
-  } else {
-    for (auto i = 0u; i < n_queues; ++i)
-      cqs_.push_back(std::make_unique<grpc::ServerCompletionQueue>());
-  }
-  n_threads_ = n_threads;
-  is_server_ = is_servier;
-}
 
 // ----------------------------------------------------------------------------------------- Getters
 
@@ -41,28 +26,29 @@ grpc::CompletionQueue& ExecutionContext::get_cq(unsigned index) const noexcept {
   return *cqs_[index];
 }
 
-grpc::ServerCompletionQueue& ExecutionContext::get_server_cq(unsigned index) const noexcept {
-  assert(is_server_);
-  return static_cast<grpc::ServerCompletionQueue&>(get_cq(index));
-}
-
 // ----------------------------------------------------------------------------------------- Action!
 
-bool ExecutionContext::post(thunk_type thunk) {
-   return task_queue_.push(std::move(thunk);
-}
+bool ExecutionContext::post(thunk_type thunk) { return task_queue_.push(std::move(thunk)); }
 
 bool ExecutionContext::post(deadlined_thunk_type thunk,
                             std::chrono::steady_clock::time_point deadline) {
 
+  const auto now = std::chrono::steady_clock::now();
+  if (now <= deadline) {
+    return post([thunk = std::move(thunk)]() { thunk(false); });
+  }
+  return post(std::move(thunk), deadline - now);
+}
+
+bool ExecutionContext::post(deadlined_thunk_type thunk, std::chrono::nanoseconds delta) {
   in_cq_post_.fetch_add(1, std::memory_order_acq_rel);
-  std::atomic_signal_fence(memory_order_acq_rel); // Forbid reordering
+  std::atomic_signal_fence(std::memory_order_acq_rel); // Forbid reordering
   bool can_post = get_state() <= ExecutionState::Running;
 
   if (can_post) {
     auto offset = next_cq_write_index_.fetch_add(1, std::memory_order_relaxed);
     auto& cq = get_cq(offset % cqs_.size());
-    new sgrpc::Alarm(cq, std::move(thunk), deadline);
+    detail::Alarm(cq, std::move(thunk), detail::duration_to_grp_timespec(delta));
   }
 
   in_cq_post_.fetch_sub(1, std::memory_order_acq_rel);
@@ -72,16 +58,16 @@ bool ExecutionContext::post(deadlined_thunk_type thunk,
 /**
  * Runs until stopped
  */
-bool ExecutionContext::run() {
-  return run_while([]() { return false; });
+void ExecutionContext::run() {
+  run_while([]() { return false; });
 }
 
 /**
  * Runs until stopped or predicate returns `true`
  */
-bool ExecutionContext::run_while(std::function<bool()> predicate) {
+void ExecutionContext::run_while(std::function<bool()> predicate) {
   if (!set_state_(ExecutionState::Running))
-    return false;
+    return;
   threads_.reserve(n_threads_);
   for (auto i = 0u; i < n_threads_; ++i)
     threads_.push_back(std::thread([this, i, predicate]() { run_one_thread_(i, predicate); }));
@@ -95,7 +81,7 @@ void ExecutionContext::stop() {
   if (!shutdown_set)
     return;
 
-  std::atomic_signal_fence(memory_order_acq_rel); // Forbid reordering
+  std::atomic_signal_fence(std::memory_order_acq_rel); // Forbid reordering
 
   // Busy wait until all post jobs are done
   while (in_cq_post_.load(std::memory_order_acquire) > 0) {
@@ -110,7 +96,7 @@ void ExecutionContext::stop() {
   for (auto& thread : threads_)
     thread.join();
 
-  thread_.clear();
+  threads_.clear();
 
   // -- Now the notifications
   std::vector<std::function<void()>> notifications;
@@ -128,7 +114,10 @@ void ExecutionContext::run_one_thread_(unsigned thread_number, std::function<boo
   bool is_ok = false;
   thunk_type thunk;
 
-  while (!predicate()) {
+  while (true) {
+    if (predicate()) { // Predicate causes 'stop()' to happen
+      stop();          // Which causes all thunks to drain
+    }
     try {
       // No matter what the next-read-offset is, every thread is looking somewhere different
       bool at_least_one_thing_executed = false;
@@ -137,13 +126,14 @@ void ExecutionContext::run_one_thread_(unsigned thread_number, std::function<boo
       // Read from the next completion queue
       for (auto i = 0u; i < cqs_.size() && !at_least_one_thing_executed; ++i) {
         auto cq_index = (thread_number + i) % cqs_.size();
-        auto deadline = std::chrono::steady_clock::time_point{}; // Instant timeout
-        auto status = get_cq(cq_index)->AsyncNext(&tag, &is_ok, deadline);
+        auto deadline = std::chrono::system_clock::time_point{}; // Instant timeout
+        auto status = get_cq(cq_index).AsyncNext(&tag, &is_ok, deadline);
         if (status == grpc::CompletionQueue::NextStatus::SHUTDOWN) {
           ++shutdown_cq_count; // cq is shutdown and fully drained
         } else if (status == grpc::CompletionQueue::NextStatus::GOT_EVENT) {
-          static_cast<CompletionQueueEvent*>(tag)->run(is_ok);
-          delete tag;
+          auto event = static_cast<CompletionQueueEvent*>(tag);
+          event->run(is_ok);
+          delete event;
           at_least_one_thing_executed = true;
         }
       }
@@ -199,7 +189,7 @@ bool ExecutionContext::set_state_(ExecutionState state) {
     return state_.compare_exchange_strong(expected, state, std::memory_order_acq_rel);
 
   case ExecutionState::Stopped:
-    expected = ExecutionState::ShuttinDown;
+    expected = ExecutionState::ShuttingDown;
     return state_.compare_exchange_strong(expected, state, std::memory_order_acq_rel);
   }
   return false;

@@ -8,7 +8,7 @@
 
 #include <atomic>
 #include <optional>
-#include <fuctional>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <thread>
@@ -22,15 +22,8 @@ enum class ExecutionState : int { Ready = 0, Running, ShuttingDown, Stopped };
 
 class ExecutionContext final {
 public:
-  // For tag dispatch in the constructor
-  static struct ClientTag {
-  } Client;
-  static struct ServerTag {
-  } Server;
-
   //@{ Construction/Destruction
-  explicit ExecutionContext(unsigned n_queues, unsigned n_threads, ClientTag);
-  explicit ExecutionContext(unsigned n_queues, unsigned n_threads, ServerTag);
+  ExecutionContext(unsigned n_threads, std::vector<std::unique_ptr<grpc::CompletionQueue>>&& cqs);
   ExecutionContext(const ExecutionContext&) = delete;
   ExecutionContext(ExecutionContext&&) = delete;
   ~ExecutionContext();
@@ -41,18 +34,16 @@ public:
   //@{ Getters
   ExecutionState get_state() const noexcept { return state_.load(std::memory_order_acquire); }
   bool is_stopped() const noexcept { return get_state() == ExecutionState::Stopped; }
-  bool is_server() const noexcept { return is_server_; }
-  bool is_client() const noexcept { return !is_server_; }
   grpc::CompletionQueue& get_cq(unsigned index) const noexcept;
-  grpc::ServerCompletionQueue& get_server_cq(unsigned index) const noexcept;
   std::size_t size() const noexcept { return cqs_.size(); }
   //@}
 
   //@{ Action!
   bool post(thunk_type thunk);
   bool post(deadlined_thunk_type thunk, std::chrono::steady_clock::time_point deadline);
-  bool run();                                      //!< Returns immediately
-  bool run_while(std::function<bool()> predicate); //!< Returns immediately
+  bool post(deadlined_thunk_type thunk, std::chrono::nanoseconds delta);
+  void run();                                      //!< Returns immediately
+  void run_while(std::function<bool()> predicate); //!< Returns immediately
   void stop();                                     //!< Blocking waits for orderly shutdown
   void add_notify_at_stopped(std::function<void()> thunk);
   //@}
@@ -71,7 +62,6 @@ private:
   std::atomic<std::size_t> next_cq_write_index_{0};
   std::atomic<std::size_t> in_cq_post_{0};
   unsigned n_threads_{0};
-  bool is_server_{false};
 };
 
 } // namespace sgrpc

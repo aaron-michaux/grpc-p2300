@@ -5,6 +5,4 @@ namespace sgrpc {
 class ExecutionContext;
 }
 
-namespace sgrpc::detail {
-bool Scheduler::running_in_this_thread(const ExecutionContext& context) noexcept;
-}
+namespace sgrpc::detail {}
