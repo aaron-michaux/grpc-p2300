@@ -7,9 +7,8 @@
 #include "sgrpc/execution_context.hpp"
 #include "sgrpc/scheduler.hpp"
 
-#include <unifex/single_thread_context.hpp>
-#include <unifex/execute.hpp>
-#include <unifex/scheduler_concepts.hpp>
+#include <stdexec/execution.hpp>
+#include <exec/static_thread_pool.hpp>
 
 #include <thread>
 
@@ -62,13 +61,86 @@
  *    start(operation_state) -> void
  */
 
+class inline_scheduler {
+  using ExecutionContext = sgrpc::ExecutionContext;
+
+  template <class R_> struct _op {
+    using R = stdexec::__t<R_>;
+    ExecutionContext& context_;
+    [[no_unique_address]] R receiver_;
+
+    void start() noexcept {
+      try {
+        stdexec::set_value(std::move(receiver_));
+      } catch (...) {
+        stdexec::set_error(std::move(receiver_), std::current_exception());
+      }
+    }
+
+    friend void tag_invoke(stdexec::start_t, _op& self) noexcept {
+      auto thunk = [self]() mutable { self.start(); };
+      self.context_.post([thunk]() mutable { thunk(); });
+    }
+  };
+
+  struct _sender {
+    using completion_signatures =
+        stdexec::completion_signatures<stdexec::set_value_t(),
+                                       stdexec::set_error_t(std::exception_ptr)>;
+
+    explicit _sender(ExecutionContext& context) : context_{context} {}
+
+    template <class R>
+    friend auto tag_invoke(stdexec::connect_t, _sender self, R&& rec)
+        -> _op<std::remove_cvref_t<R>> {
+      return {self.context_, std::move(rec)};
+    }
+
+    friend inline_scheduler tag_invoke(stdexec::get_completion_scheduler_t<stdexec::set_value_t>,
+                                       _sender self) noexcept {
+      return inline_scheduler{self.context_};
+    }
+
+    ExecutionContext& context_;
+  };
+
+public:
+  explicit inline_scheduler(ExecutionContext& context) : context_{context} {}
+  friend _sender tag_invoke(stdexec::schedule_t, inline_scheduler self) noexcept {
+    return _sender{self.context_};
+  }
+  bool operator==(const inline_scheduler& o) const noexcept { return &context_ == &o.context_; }
+
+  ExecutionContext& context_;
+};
+
+int compute(int x) { return x + 1; }
+
 int main(int, char**) {
 
   // sgrpc::ExecutionContext ctx{2, 1};
   // unifex::execute(sgrpc::Scheduler{ctx}, []() { fmt::print("Hello World!\n"); });
 
-  unifex::single_thread_context ctx;
-  unifex::execute(ctx.get_scheduler(), []() { fmt::print("Hello World!\n"); });
+  // Get a handle to the thread pool:
+  // exec::static_thread_pool pool(8);
+  // stdexec::scheduler auto sched = pool.get_scheduler();
+  sgrpc::ExecutionContext ctx{2, 1};
+  ctx.run();
+  stdexec::scheduler auto schedz = inline_scheduler{ctx};
+
+  stdexec::scheduler auto sched = sgrpc::Scheduler{ctx};
+
+  // Describe some work:
+  auto fun = [](int i) { return compute(i); };
+  auto work = stdexec::when_all(stdexec::on(sched, stdexec::just(0) | stdexec::then(fun)),
+                                stdexec::on(sched, stdexec::just(1) | stdexec::then(fun)),
+                                stdexec::on(sched, stdexec::just(2) | stdexec::then(fun)));
+
+  // Launch the work and wait for the result:
+  auto [i, j, k] = stdexec::sync_wait(std::move(work)).value();
+
+  // Print the results:
+  fmt::print("{}, {}, {}", i, j, k);
 
   std::thread server_thread{GreetingServer::run_server};
   GreetingClient::run_client();

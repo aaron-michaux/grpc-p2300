@@ -3,33 +3,65 @@
 
 #include "sender.hpp"
 
-#include <unifex/scheduler_concepts.hpp>
+#include "detail/base_inc.hpp"
 
 namespace sgrpc {
 
 class ExecutionContext;
-using ::unifex::get_scheduler;
 
 class Scheduler {
+  template <typename R> struct Op_ {
+    ExecutionContext& context_;
+    [[no_unique_address]] R receiver_;
+
+    void start() noexcept {
+      try {
+        stdexec::set_value(std::move(receiver_));
+      } catch (...) {
+        stdexec::set_error(std::move(receiver_), std::current_exception());
+      }
+    }
+
+    friend void tag_invoke(stdexec::start_t, Op_& self) noexcept {
+      // The start of a computation chain on `context_`
+      self.context_.post([self]() mutable { self.start(); });
+    }
+  };
+
+  struct Sender_ {
+    ExecutionContext& context_; // not-owned
+
+    using completion_signatures =
+        stdexec::completion_signatures<stdexec::set_value_t(),
+                                       stdexec::set_error_t(std::exception_ptr)>;
+
+    template <class R>
+    friend auto tag_invoke(stdexec::connect_t, Sender_ self, R&& rec)
+        -> Op_<std::remove_cvref_t<R>> {
+      return {self.context_, std::move(rec)};
+    }
+
+    friend Scheduler tag_invoke(stdexec::get_completion_scheduler_t<stdexec::set_value_t>,
+                                Sender_ self) noexcept {
+      return Scheduler{self.context_};
+    }
+  };
+
 public:
   constexpr explicit Scheduler(ExecutionContext& context) noexcept : context_(context) {}
-
   constexpr bool operator==(const Scheduler& other) const noexcept {
     return &context_ == &other.context_;
-  }
-  constexpr bool operator!=(const Scheduler& other) const noexcept { return !(*this == other); }
-
-  constexpr SchedulerSender schedule() const noexcept { return {context_}; }
-
+  };
+  constexpr Sender_ schedule() const noexcept { return {context_}; }
   constexpr ExecutionContext& context() const noexcept { return context_; }
 
-  friend SchedulerSender tag_invoke(unifex::tag_t<unifex::schedule>,
-                                    const Scheduler& self) noexcept {
+private:
+  ExecutionContext& context_;
+
+  // -- Implementation Details -- //
+  friend Sender_ tag_invoke(stdexec::schedule_t, Scheduler self) noexcept {
     return self.schedule();
   }
-
-private:
-  ExecutionContext& context_; // not-owned
 };
 
 } // namespace sgrpc

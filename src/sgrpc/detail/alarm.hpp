@@ -1,7 +1,7 @@
 
 #pragma once
 
-#include <sgrpc/completion-queue-event.hpp>
+#include <sgrpc/completion_queue_event.hpp>
 
 #include <grpcpp/alarm.h>
 

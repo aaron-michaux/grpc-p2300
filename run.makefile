@@ -23,11 +23,14 @@ BOOST_DEFINES:=-DBOOST_NO_TYPEID -DBOOST_ERROR_CODE_HEADER_ONLY -DBOOST_ASIO_SEP
 DEFINES:=$(BOOST_DEFINES) -DUSE_ASIO -DFMT_HEADER_ONLY
 WARNINGS:=-Wno-variadic-macros
 
+GRPC_LIBS:=-lgrpc++ -lgrpc -lgpr -lupb -laddress_sorting -lprotobuf -lre2 -lcares -labsl  
+SYS_LIBS:=-lssl -lcrypto -lz -lpthread
+
 CFLAGS:=$(INCDIRS) $(DEFINES) $(WARNINGS)
 CPPFLAGS:=
-CXXFLAGS:=$(INCDIRS) $(DEFINES) $(WARNINGS) 
+CXXFLAGS:=$(INCDIRS) $(DEFINES) $(WARNINGS) -fconcepts-diagnostics-depth=2
 LDFLAGS:=
-LIBS:=-lunifex  -lgrpc++ -lgrpc -lgpr -lupb -laddress_sorting -lprotobuf -lre2 -lcares -labsl  -lssl -lcrypto -lz -lpthread 
+LIBS:=-lunifex $(GRPC_LIBS) $(SYS_LIBS)
 
 # --------------------------------------------------------------------------- Add Source Directories
 

@@ -1,8 +1,8 @@
 
 #pragma once
 
-#include "detail/atomic-task-stealing-queue.hpp"
-#include "completion-queue-event.hpp"
+#include "detail/atomic_task_stealing_queue.hpp"
+#include "completion_queue_event.hpp"
 
 #include <grpcpp/completion_queue.h>
 

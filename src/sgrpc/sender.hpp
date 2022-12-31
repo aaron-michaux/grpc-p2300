@@ -3,7 +3,7 @@
 
 #include "execution_context.hpp"
 
-#include <unifex/sender_concepts.hpp>
+#include "detail/base_inc.hpp"
 
 namespace sgrpc {
 
@@ -38,8 +38,7 @@ template <typename Receiver> class SchedulerOperationState final {
     context_.post([this]() { set_value(receiver_, None{}); });
   }
 
-  friend void tag_invoke(unifex::tag_t<unifex::start>,
-                         const SchedulerOperationState& self) noexcept {
+  friend void tag_invoke(stdexec::start_t, SchedulerOperationState&& self) noexcept {
     return self.start();
   }
 
@@ -64,37 +63,13 @@ public:
   }
 
   template <typename Receiver>
-  friend detail::SchedulerOperationState<Receiver> tag_invoke(unifex::tag_t<unifex::connect>,
-                                                              const SchedulerSender& self,
-                                                              Receiver receiver) noexcept {
+  friend auto tag_invoke(stdexec::connect_t, SchedulerSender self, Receiver receiver) noexcept
+      -> detail::SchedulerOperationState<Receiver> {
     return self.connect(receiver);
   }
 
 private:
   ExecutionContext& context_;
 };
-
-// template <typename Service, typename PrepareAsyncMemFun, typename RequestType,
-//           typename ResponseType>
-// class RpcCall {
-// public:
-//   void send_to_wire() {
-//     response_reader_ = reader_factory_(service_, &client_context_, request_, &cq_);
-//     response_reader_->StartCall();
-//     response_reader_->Finish(&response_, &status, this); // scheduled
-//   }
-
-//   RequestType& request() noexcept { return request_; }
-//   const RequestType& request() const noexcept { return request_; }
-
-// private:
-//   Service& service_;
-//   PrepareAsyncMemFun reader_factory_;
-//   grpc::ClientContext client_context_;
-//   grpc::Status status_;
-//   RequestType request_;
-//   ResponseType response_;
-//   std::unique_ptr<grpc::ClientAsyncResponseReader<ResponseType>> response_reader_;
-// };
 
 } // namespace sgrpc
