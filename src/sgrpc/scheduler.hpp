@@ -10,6 +10,7 @@ namespace sgrpc {
 class ExecutionContext;
 
 class Scheduler {
+  // OperationState: start()
   template <typename R> struct Op_ {
     ExecutionContext& context_;
     [[no_unique_address]] R receiver_;
@@ -28,6 +29,7 @@ class Scheduler {
     }
   };
 
+  // Sender: connect(...), get_completion_scheduler(...)
   struct Sender_ {
     ExecutionContext& context_; // not-owned
 
@@ -47,26 +49,21 @@ class Scheduler {
     }
   };
 
+  // Scheduler: schedule()
+  friend Sender_ tag_invoke(stdexec::schedule_t, Scheduler self) noexcept {
+    return self.schedule();
+  }
+
 public:
   constexpr explicit Scheduler(ExecutionContext& context) noexcept : context_(context) {}
-  constexpr bool operator==(const Scheduler& other) const noexcept {
-    return &context_ == &other.context_;
-  };
+  constexpr bool operator==(const Scheduler& o) const noexcept { return &context_ == &o.context_; };
   constexpr Sender_ schedule() const noexcept { return {context_}; }
   constexpr ExecutionContext& context() const noexcept { return context_; }
 
 private:
   ExecutionContext& context_;
-
-  // -- Implementation Details -- //
-  friend Sender_ tag_invoke(stdexec::schedule_t, Scheduler self) noexcept {
-    return self.schedule();
-  }
 };
 
 } // namespace sgrpc
-
-// namespace unifex::_schedule {
-// constexpr auto schedule(const sgrpc::Scheduler& self) noexcept { return self.schedule(); }
 
 // } // namespace unifex::_schedule
