@@ -17,6 +17,15 @@ ExecutionContext::ExecutionContext(unsigned n_threads,
   assert(cqs_.size() > 0);
 }
 
+ExecutionContext::ExecutionContext(unsigned n_threads, unsigned number_cqs)
+    : task_queue_{n_threads + 1}, n_threads_{n_threads} {
+  assert(n_threads > 0);
+  assert(number_cqs > 0);
+  cqs_.reserve(number_cqs);
+  for (auto i = 0u; i < number_cqs; ++i)
+    cqs_.push_back(std::make_unique<grpc::CompletionQueue>());
+}
+
 ExecutionContext::~ExecutionContext() { stop(); }
 
 // ----------------------------------------------------------------------------------------- Getters

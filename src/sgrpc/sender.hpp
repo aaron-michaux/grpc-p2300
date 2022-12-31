@@ -3,6 +3,8 @@
 
 #include "execution_context.hpp"
 
+#include <unifex/sender_concepts.hpp>
+
 namespace sgrpc {
 
 struct None {}; // Not-a-value
@@ -31,8 +33,14 @@ template <typename Receiver> class SchedulerOperationState final {
   SchedulerOperationState& operator=(SchedulerOperationState&&) = delete;
   //@}
 
-  friend void start(SchedulerOperationState& self) {
-    self.context_.post([]() { set_value(receiver_, None{}); }); // start of a computation chain
+  void start() {
+    // This is the start of a computation chain
+    context_.post([this]() { set_value(receiver_, None{}); });
+  }
+
+  friend void tag_invoke(unifex::tag_t<unifex::start>,
+                         const SchedulerOperationState& self) noexcept {
+    return self.start();
   }
 
 private:
@@ -51,9 +59,15 @@ public:
   //@}
 
   template <typename Receiver>
-  friend detail::SchedulerOperationState<Receiver> connect(SchedulerSender sender,
-                                                           Receiver receiver) {
-    return {receiver, sender.context_};
+  detail::SchedulerOperationState<Receiver> connect(Receiver receiver) {
+    return {receiver, context_};
+  }
+
+  template <typename Receiver>
+  friend detail::SchedulerOperationState<Receiver> tag_invoke(unifex::tag_t<unifex::connect>,
+                                                              const SchedulerSender& self,
+                                                              Receiver receiver) noexcept {
+    return self.connect(receiver);
   }
 
 private:

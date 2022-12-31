@@ -25,7 +25,7 @@ WARNINGS:=-Wno-variadic-macros
 
 CFLAGS:=$(INCDIRS) $(DEFINES) $(WARNINGS)
 CPPFLAGS:=
-CXXFLAGS:=$(INCDIRS) $(DEFINES) $(WARNINGS)
+CXXFLAGS:=$(INCDIRS) $(DEFINES) $(WARNINGS) 
 LDFLAGS:=
 LIBS:=-lunifex  -lgrpc++ -lgrpc -lgpr -lupb -laddress_sorting -lprotobuf -lre2 -lcares -labsl  -lssl -lcrypto -lz -lpthread 
 

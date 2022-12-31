@@ -24,6 +24,7 @@ class ExecutionContext final {
 public:
   //@{ Construction/Destruction
   ExecutionContext(unsigned n_threads, std::vector<std::unique_ptr<grpc::CompletionQueue>>&& cqs);
+  ExecutionContext(unsigned n_threads, unsigned number_cqs);
   ExecutionContext(const ExecutionContext&) = delete;
   ExecutionContext(ExecutionContext&&) = delete;
   ~ExecutionContext();
