@@ -19,37 +19,35 @@ private:
     [[no_unique_address]] R receiver_;
 
     void invoke() noexcept {
-      const bool invoked = context_.post(
-          [this](grpc::CompletionQueue& cq) mutable -> std::unique_ptr<CompletionQueueEvent> {
-            // Factory for creating the correct response writer type
-            auto reader_factory = [this, &cq](grpc::ClientContext& client_context,
-                                              RequestType request) mutable {
-              return factory_fn_(&client_context, std::move(request), &cq);
-            };
+      const bool invoked = context_.post([this](grpc::CompletionQueue& cq) mutable
+                                         -> std::unique_ptr<CompletionQueueEvent> {
+        // Factory for creating the correct response writer type
+        auto reader_factory = [this, &cq](grpc::ClientContext& client_context,
+                                          RequestType request) mutable {
+          return factory_fn_(&client_context, std::move(request), &cq);
+        };
 
-            // Sets the value on the receiver when the rpc call completes
-            auto completion = [this](bool is_ok, const grpc::Status& status,
-                                     const ResponseType& response) mutable {
-              if (!is_ok) {
-                std::string message;
-                stdexec::set_error(std::move(receiver_),
-                                   grpc::Status{grpc::StatusCode::CANCELLED, message});
-              } else if (status.ok()) {
-                fmt::print("response: {}\n", response.message());
-                stdexec::set_value(std::move(receiver_), std::move(response));
-              } else {
-                // stdexec::set_error(std::move(receiver_), std::move(status));
-              }
-            };
+        // Sets the value on the receiver when the rpc call completes
+        auto completion = [this](bool is_ok, const grpc::Status& status,
+                                 const ResponseType& response) mutable {
+          if (!is_ok) {
+            stdexec::set_error(std::move(receiver_), grpc::Status{grpc::StatusCode::CANCELLED, ""});
+          } else if (status.ok()) {
+            fmt::print("response: {}\n", response.message());
+            stdexec::set_value(std::move(receiver_), std::move(response));
+          } else {
+            stdexec::set_error(std::move(receiver_),
+                               grpc::Status{status.error_code(), status.error_message()});
+          }
+        };
 
-            return std::make_unique<InflightRpc<RequestType, ResponseType>>(
-                std::move(reader_factory), std::move(*request_), std::move(completion));
-          });
+        return std::make_unique<InflightRpc<RequestType, ResponseType>>(
+            std::move(reader_factory), std::move(*request_), std::move(completion));
+      });
 
       if (!invoked) { // Immediately set the value to "CANCELLED"
-        std::string message{"rpc was not scheduled"};
         stdexec::set_error(std::move(receiver_),
-                           grpc::Status{grpc::StatusCode::CANCELLED, message});
+                           grpc::Status{grpc::StatusCode::CANCELLED, "rpc was not scheduled"});
       }
     }
 
