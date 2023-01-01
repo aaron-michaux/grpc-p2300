@@ -101,7 +101,7 @@ template <typename Service, typename RequestType, typename ResponseType> class R
 public:
   template <typename MemberFunctionPointer>
   RpcCallStub(Service& service, MemberFunctionPointer mem_fn_ptr)
-      : service_{service}, factory_fn_{service_, mem_fn_ptr} {}
+      : factory_fn_{service, mem_fn_ptr} {}
 
   // Should return a sender... hopefully does not need access to the GrpcContext here
   void call(sgrpc::ExecutionContext& context, RequestType request,
@@ -118,7 +118,6 @@ public:
   }
 
 private:
-  Service& service_;
   ResponseReaderFactory<Service, RequestType, ResponseType> factory_fn_;
 };
 
