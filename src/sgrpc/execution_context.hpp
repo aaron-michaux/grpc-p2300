@@ -17,6 +17,8 @@ namespace sgrpc {
 
 using thunk_type = std::function<void()>;
 using deadlined_thunk_type = std::function<void(bool)>;
+using rpc_call_factory =
+    std::function<std::unique_ptr<CompletionQueueEvent>(grpc::CompletionQueue&)>;
 
 enum class ExecutionState : int { Ready = 0, Running, ShuttingDown, Stopped };
 
@@ -36,13 +38,18 @@ public:
   ExecutionState get_state() const noexcept { return state_.load(std::memory_order_acquire); }
   bool is_stopped() const noexcept { return get_state() == ExecutionState::Stopped; }
   grpc::CompletionQueue& get_cq(unsigned index) const noexcept;
+  grpc::CompletionQueue& get_next_cq() const noexcept;
   std::size_t size() const noexcept { return cqs_.size(); }
   //@}
 
-  //@{ Action!
+  //@{ Posting events
   bool post(thunk_type thunk);
   bool post(deadlined_thunk_type thunk, std::chrono::steady_clock::time_point deadline);
   bool post(deadlined_thunk_type thunk, std::chrono::nanoseconds delta);
+  bool post(rpc_call_factory call_factory);
+  //@}
+
+  //@{ Action!
   void run();                                      //!< Returns immediately
   void run_while(std::function<bool()> predicate); //!< Returns immediately
   void stop();                                     //!< Blocking waits for orderly shutdown
@@ -54,14 +61,14 @@ private:
   bool set_state_(ExecutionState state); //!< True iff successful
   void run_one_thread_(unsigned thread_number, std::function<bool()> predicate);
 
-  std::mutex padlock_;
+  mutable std::mutex padlock_;
   std::vector<std::thread> threads_;
   AtomicTaskStealingQueue<thunk_type> task_queue_; //!< For things not pushed onto cqs_
   std::vector<std::unique_ptr<grpc::CompletionQueue>> cqs_;
   std::vector<std::function<void()>> notifications_; //!< For when stopped and drained
   std::atomic<ExecutionState> state_{ExecutionState::Ready};
-  std::atomic<std::size_t> next_cq_write_index_{0};
-  std::atomic<std::size_t> in_cq_post_{0};
+  mutable std::atomic<std::size_t> next_cq_write_index_{0};
+  mutable std::atomic<std::size_t> in_cq_post_{0};
   unsigned n_threads_{0};
 };
 

@@ -15,17 +15,15 @@ class Scheduler {
     ExecutionContext& context_;
     [[no_unique_address]] R receiver_;
 
-    void start() noexcept {
-      try {
-        stdexec::set_value(std::move(receiver_));
-      } catch (...) {
-        stdexec::set_error(std::move(receiver_), std::current_exception());
-      }
-    }
-
     friend void tag_invoke(stdexec::start_t, Op_& self) noexcept {
       // The start of a computation chain on `context_`
-      self.context_.post([self]() mutable { self.start(); });
+      self.context_.post([self]() mutable {
+        try {
+          stdexec::set_value(std::move(self.receiver_));
+        } catch (...) {
+          stdexec::set_error(std::move(self.receiver_), std::current_exception());
+        }
+      });
     }
   };
 

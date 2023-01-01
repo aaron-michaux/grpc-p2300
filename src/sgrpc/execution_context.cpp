@@ -35,7 +35,12 @@ grpc::CompletionQueue& ExecutionContext::get_cq(unsigned index) const noexcept {
   return *cqs_[index];
 }
 
-// ----------------------------------------------------------------------------------------- Action!
+grpc::CompletionQueue& ExecutionContext::get_next_cq() const noexcept {
+  auto offset = next_cq_write_index_.fetch_add(1, std::memory_order_relaxed);
+  return get_cq(offset % cqs_.size());
+}
+
+// -------------------------------------------------------------------------------------------- Post
 
 bool ExecutionContext::post(thunk_type thunk) { return task_queue_.push(std::move(thunk)); }
 
@@ -55,14 +60,27 @@ bool ExecutionContext::post(deadlined_thunk_type thunk, std::chrono::nanoseconds
   bool can_post = get_state() <= ExecutionState::Running;
 
   if (can_post) {
-    auto offset = next_cq_write_index_.fetch_add(1, std::memory_order_relaxed);
-    auto& cq = get_cq(offset % cqs_.size());
-    detail::Alarm(cq, std::move(thunk), detail::duration_to_grp_timespec(delta));
+    new detail::Alarm{get_next_cq(), std::move(thunk), detail::duration_to_grp_timespec(delta)};
   }
 
   in_cq_post_.fetch_sub(1, std::memory_order_acq_rel);
   return can_post;
 }
+
+bool ExecutionContext::post(rpc_call_factory call_factory) {
+  in_cq_post_.fetch_add(1, std::memory_order_acq_rel);
+  std::atomic_signal_fence(std::memory_order_acq_rel); // Forbid reordering
+  bool can_post = get_state() <= ExecutionState::Running;
+
+  if (can_post) {
+    call_factory(get_next_cq()).release();
+  }
+
+  in_cq_post_.fetch_sub(1, std::memory_order_acq_rel);
+  return can_post;
+}
+
+// ----------------------------------------------------------------------------------------- Action!
 
 /**
  * Runs until stopped
@@ -141,7 +159,7 @@ void ExecutionContext::run_one_thread_(unsigned thread_number, std::function<boo
           ++shutdown_cq_count; // cq is shutdown and fully drained
         } else if (status == grpc::CompletionQueue::NextStatus::GOT_EVENT) {
           auto event = static_cast<CompletionQueueEvent*>(tag);
-          event->run(is_ok);
+          event->complete(is_ok);
           delete event;
           at_least_one_thing_executed = true;
         }

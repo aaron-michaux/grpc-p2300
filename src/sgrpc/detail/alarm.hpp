@@ -14,7 +14,7 @@ public:
     alarm_.Set(&cq, deadline, this);
   }
 
-  void run(bool is_ok) override {
+  void complete(bool is_ok) override {
     if (thunk_) {
       thunk_(is_ok);
     }
