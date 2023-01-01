@@ -38,12 +38,6 @@ int compute(int x) { return x + 1; }
 
 int main(int, char**) {
 
-  {
-    SomeClass object;
-    void (SomeClass::*ptr)(int) = &SomeClass::fn;
-    (object.*ptr)(10);
-  }
-
   std::thread server_thread{GreetingServer::run_server};
 
   sgrpc::ExecutionContext ctx{2, 1};
@@ -51,23 +45,27 @@ int main(int, char**) {
 
   stdexec::scheduler auto sched = sgrpc::Scheduler{ctx};
 
+  auto channel = grpc::CreateChannel("localhost:50051", grpc::InsecureChannelCredentials());
+
+  Greeting::Client client{ctx, channel};
+  helloworld::HelloRequest request;
+  request.set_name("Pius!");
+
   // Describe some work:
   auto fun = [](int i) { return compute(i); };
   auto work = stdexec::when_all(stdexec::on(sched, stdexec::just(0) | stdexec::then(fun)),
                                 stdexec::on(sched, stdexec::just(1) | stdexec::then(fun)),
-                                stdexec::on(sched, stdexec::just(2) | stdexec::then(fun)));
+                                stdexec::on(sched, stdexec::just(2) | stdexec::then(fun))) //
+              | client.say_hello(std::move(request));
+
+  auto result = client.sync_say_hello("Metellus");
+  fmt::print("{}\n", result);
 
   // Launch the work and wait for the result:
   auto [i, j, k] = stdexec::sync_wait(std::move(work)).value();
 
   // Print the results:
   fmt::print("{}, {}, {}\n", i, j, k);
-
-  auto channel = grpc::CreateChannel("localhost:50051", grpc::InsecureChannelCredentials());
-  Greeting::Client client{ctx, channel};
-  client.say_hello("Pius");
-  auto result = client.sync_say_hello("Metellus");
-  fmt::print("{}\n", result);
 
   server_thread.join();
 

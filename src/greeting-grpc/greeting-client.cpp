@@ -18,7 +18,7 @@
 namespace Greeting {
 
 struct Client::Impl_ {
-  //  using namespace helloworld;
+  // using namespace helloworld;
   using Service = helloworld::Greeter::Stub;
 
   explicit Impl_(sgrpc::ExecutionContext& context, std::shared_ptr<grpc::Channel> channel)
@@ -29,8 +29,7 @@ struct Client::Impl_ {
 
   sgrpc::ExecutionContext& context_;
   std::unique_ptr<Service> stub_;
-
-  sgrpc::RpcCallStub<Service, helloworld::HelloRequest, helloworld::HelloReply> stub_say_hello_;
+  sgrpc::RpcStub<Service, helloworld::HelloRequest, helloworld::HelloReply> stub_say_hello_;
 };
 
 Client::Client(sgrpc::ExecutionContext& context, std::shared_ptr<grpc::Channel> channel)
@@ -87,16 +86,9 @@ std::string Client::sync_say_hello(std::string_view user) {
   }
 }
 
-void Client::say_hello(std::string_view user) {
-  fmt::print("say hello {}\n", user);
-  helloworld::HelloRequest request;
-  request.set_name(user.data());
-  impl_->stub_say_hello_.call(
-      impl_->context_,    //
-      std::move(request), //
-      [](bool is_ok, const grpc::Status& status, const helloworld::HelloReply& response) {
-        fmt::print("got response: {}\n", response.message());
-      });
+sgrpc::RpcSender<Client::Service, HelloRequest, HelloReply>
+Client::say_hello(HelloRequest request) {
+  return impl_->stub_say_hello_.call(impl_->context_, std::move(request));
 }
 
 } // namespace Greeting
