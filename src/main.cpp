@@ -39,6 +39,10 @@ std::tuple<int, int, int> sumit(int x, int y, int z) { return {x, x + y, x + y +
 
 int main(int, char**) {
 
+  if (1 > 0) {
+    fmt::print("Hello!\n");
+  }
+
   std::thread server_thread{GreetingServer::run_server};
 
   sgrpc::ExecutionContext ctx{2, 1};
@@ -56,9 +60,8 @@ int main(int, char**) {
   auto fun = [](int i) { return compute(i); };
   auto work = stdexec::when_all(stdexec::on(sched, stdexec::just(0) | stdexec::then(fun)),
                                 stdexec::on(sched, stdexec::just(1) | stdexec::then(fun)),
-                                stdexec::on(sched, stdexec::just(2) | stdexec::then(fun))) |
-              stdexec::then(sumit);
-  ;
+                                stdexec::on(sched, stdexec::just(2) | stdexec::then(fun))) //
+              | stdexec::then(sumit);
 
   auto snd = client.say_hello(std::move(request));
 

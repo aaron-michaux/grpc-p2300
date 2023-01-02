@@ -28,7 +28,7 @@ SYS_LIBS:=-lssl -lcrypto -lz -lpthread
 
 CFLAGS:=$(INCDIRS) $(DEFINES) $(WARNINGS)
 CPPFLAGS:=
-CXXFLAGS:=$(INCDIRS) $(DEFINES) $(WARNINGS) -fconcepts-diagnostics-depth=2
+CXXFLAGS:=$(INCDIRS) $(DEFINES) $(WARNINGS)
 LDFLAGS:=
 LIBS:=-lunifex $(GRPC_LIBS) $(SYS_LIBS)
 
