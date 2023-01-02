@@ -27,6 +27,7 @@ COVERAGE_HTML="False"
 RULE="all"
 CXXSTD="-std=c++2b"
 STDLIB="stdcxx"
+COMPDB="False"
 TARGET_OVERRIDE=""
 NIGGLY_ROOT_DIR="$PPWD/modules/niggly"
 MAKEFILE="run.makefile"
@@ -89,25 +90,25 @@ done
 while [ "$#" -gt "0" ] ; do
     
     # Compiler
-    [ "$1" = "clang" ]     && TOOLCHAIN="clang"  && shift && continue
-    [ "$1" = "clang-16" ]  && TOOLCHAIN="clang"  && shift && continue
-    [ "$1" = "gcc" ]       && TOOLCHAIN="gcc"    && shift && continue
-    [ "$1" = "gcc-12" ]    && TOOLCHAIN="gcc"    && shift && continue
+    [ "$1" = "clang" ]     && TOOLCHAIN="clang"     && shift && continue
+    [ "$1" = "clang-16" ]  && TOOLCHAIN="clang"     && shift && continue
+    [ "$1" = "gcc" ]       && TOOLCHAIN="gcc"       && shift && continue
+    [ "$1" = "gcc-12" ]    && TOOLCHAIN="gcc"       && shift && continue
 
     # Configuration
-    [ "$1" = "asan" ]      && CONFIG="asan"      && shift && continue
-    [ "$1" = "usan" ]      && CONFIG="usan"      && shift && continue
-    [ "$1" = "tsan" ]      && CONFIG="tsan"      && shift && continue
-    [ "$1" = "debug" ]     && CONFIG="debug"     && shift && continue
-    [ "$1" = "reldbg" ]    && CONFIG="reldbg"    && shift && continue
-    [ "$1" = "release" ]   && CONFIG="release"   && shift && continue
-    [ "$1" = "valgrind" ]  && CONFIG="debug"     && VALGRIND="True" && shift && continue
-    [ "$1" = "helgrind" ]  && CONFIG="debug"     && HELGRIND="True" && shift && continue
-    [ "$1" = "gdb" ]       && CONFIG="debug"     && GDB="True" && shift && continue
+    [ "$1" = "asan" ]      && CONFIG="asan"         && shift && continue
+    [ "$1" = "usan" ]      && CONFIG="usan"         && shift && continue
+    [ "$1" = "tsan" ]      && CONFIG="tsan"         && shift && continue
+    [ "$1" = "debug" ]     && CONFIG="debug"        && shift && continue
+    [ "$1" = "reldbg" ]    && CONFIG="reldbg"       && shift && continue
+    [ "$1" = "release" ]   && CONFIG="release"      && shift && continue
+    [ "$1" = "valgrind" ]  && CONFIG="debug"        && VALGRIND="True" && shift && continue
+    [ "$1" = "helgrind" ]  && CONFIG="debug"        && HELGRIND="True" && shift && continue
+    [ "$1" = "gdb" ]       && CONFIG="debug"        && GDB="True"      && shift && continue
 
     # Stdlib
-    [ "$1" = "libcxx" ]    && STDLIB="libcxx"    && shift && continue
-    [ "$1" = "stdcxx" ]    && STDLIB="stdcxx"    && shift && continue
+    [ "$1" = "libcxx" ]    && STDLIB="libcxx"       && shift && continue
+    [ "$1" = "stdcxx" ]    && STDLIB="stdcxx"       && shift && continue
     
     # Other options
     [ "$1" = "clean" ]     && RULE="clean"          && shift && continue
@@ -121,8 +122,11 @@ while [ "$#" -gt "0" ] ; do
     [ "$1" = "test" ]      && BUILD_TESTS="True"    && BUILD_EXAMPLES="True" && shift && continue
     [ "$1" = "bench" ]     && BENCHMARK="True"      && shift && continue
     [ "$1" = "examples" ]  && BUILD_EXAMPLES="True" && shift && continue
+    [ "$1" = "compdb"   ]  && COMPDB="True" \
+        && BUILD_TESTS="True" && BUILD_EXAMPLES="True" && CONFIG="debug" && TOOLCHAIN="clang" \
+        && shift && continue
     [ "$1" = "coverage" ]  \
-        && BUILD_TESTS="True"  && COVERAGE="True" && CONFIG="debug" && shift && continue
+        && BUILD_TESTS="True"  && COVERAGE="True"  && CONFIG="debug" && shift && continue
 
     [ "${1:0:2}" = "-j" ]  && NPROC="$1"            && shift && continue
     
@@ -155,8 +159,12 @@ if [ "$COVERAGE" = "True" ] ; then
     RULE="$([ "$TOOLCHAIN" = "gcc" ] && echo "coverage_html" || echo "llvm_coverage_html")"
 fi
 
+if [ "$COMPDB" = "True" ] && [ "$RULE" != "clean" ] ; then
+    RULE="compile_commands.json"
+fi
+
 do_make()
-{
+{    
     make -f "$MAKEFILE" $NPROC $RULE
     RET="$?"
     [ "$RET" != "0" ] && exit $RET   || true
@@ -167,6 +175,7 @@ do_make
 [ "$RULE" = "info" ]       && exit 0 || true
 [ "$BUILD_ONLY" = "True" ] && exit 0 || true
 [ "$COVERAGE" = "True" ]   && exit 0 || true
+[ "$COMPDB" = "True" ]     && exit 0 || true
 
 if [ "$TARGET_OVERRIDE" = "" ] ; then
 

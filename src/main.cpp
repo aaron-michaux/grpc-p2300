@@ -35,6 +35,7 @@ public:
 };
 
 int compute(int x) { return x + 1; }
+std::tuple<int, int, int> sumit(int x, int y, int z) { return {x, x + y, x + y + z}; }
 
 int main(int, char**) {
 
@@ -55,7 +56,9 @@ int main(int, char**) {
   auto fun = [](int i) { return compute(i); };
   auto work = stdexec::when_all(stdexec::on(sched, stdexec::just(0) | stdexec::then(fun)),
                                 stdexec::on(sched, stdexec::just(1) | stdexec::then(fun)),
-                                stdexec::on(sched, stdexec::just(2) | stdexec::then(fun)));
+                                stdexec::on(sched, stdexec::just(2) | stdexec::then(fun))) |
+              stdexec::then(sumit);
+  ;
 
   auto snd = client.say_hello(std::move(request));
 
@@ -63,7 +66,7 @@ int main(int, char**) {
   fmt::print("{}\n", result);
 
   // Launch the work and wait for the result:
-  auto [i, j, k] = stdexec::sync_wait(std::move(work)).value();
+  auto [i, j, k] = std::get<0>(stdexec::sync_wait(std::move(work)).value());
 
   stdexec::sync_wait(std::move(snd));
 

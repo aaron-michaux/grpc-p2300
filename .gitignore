@@ -1,3 +1,4 @@
 build
 valgrind.log
 helgrind.log
+compile_commands.json
