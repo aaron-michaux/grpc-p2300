@@ -42,9 +42,9 @@ grpc::CompletionQueue& ExecutionContext::get_next_cq() const noexcept {
 
 // -------------------------------------------------------------------------------------------- Post
 
-bool ExecutionContext::post(thunk_type thunk) { return task_queue_.push(std::move(thunk)); }
+bool ExecutionContext::post(ThunkType thunk) { return task_queue_.push(std::move(thunk)); }
 
-bool ExecutionContext::post(deadlined_thunk_type thunk,
+bool ExecutionContext::post(DeadlinedThunkType thunk,
                             std::chrono::steady_clock::time_point deadline) {
 
   const auto now = std::chrono::steady_clock::now();
@@ -54,7 +54,7 @@ bool ExecutionContext::post(deadlined_thunk_type thunk,
   return post(std::move(thunk), deadline - now);
 }
 
-bool ExecutionContext::post(deadlined_thunk_type thunk, std::chrono::nanoseconds delta) {
+bool ExecutionContext::post(DeadlinedThunkType thunk, std::chrono::nanoseconds delta) {
   in_cq_post_.fetch_add(1, std::memory_order_acq_rel);
   std::atomic_signal_fence(std::memory_order_acq_rel); // Forbid reordering
   bool can_post = get_state() <= ExecutionState::Running;
@@ -67,7 +67,7 @@ bool ExecutionContext::post(deadlined_thunk_type thunk, std::chrono::nanoseconds
   return can_post;
 }
 
-bool ExecutionContext::post(rpc_call_factory call_factory) {
+bool ExecutionContext::post(RpcFactory call_factory) {
   in_cq_post_.fetch_add(1, std::memory_order_acq_rel);
   std::atomic_signal_fence(std::memory_order_acq_rel); // Forbid reordering
   bool can_post = get_state() <= ExecutionState::Running;
@@ -139,7 +139,7 @@ void ExecutionContext::stop() {
 void ExecutionContext::run_one_thread_(unsigned thread_number, std::function<bool()> predicate) {
   void* tag = nullptr;
   bool is_ok = false;
-  thunk_type thunk;
+  ThunkType thunk;
 
   while (true) {
     if (predicate()) { // Predicate causes 'stop()' to happen

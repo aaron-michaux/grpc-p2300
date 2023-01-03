@@ -63,7 +63,7 @@ int main(int, char**) {
                                 stdexec::on(sched, stdexec::just(2) | stdexec::then(fun))) //
               | stdexec::then(sumit);
 
-  auto snd = client.say_hello(std::move(request));
+  auto snd = client.say_hello("Tritarch");
 
   auto result = client.sync_say_hello("Metellus");
   fmt::print("{}\n", result);
@@ -71,10 +71,11 @@ int main(int, char**) {
   // Launch the work and wait for the result:
   auto [i, j, k] = std::get<0>(stdexec::sync_wait(std::move(work)).value());
 
-  stdexec::sync_wait(std::move(snd));
+  auto r2 = stdexec::sync_wait(std::move(snd));
 
   // Print the results:
   fmt::print("{}, {}, {}\n", i, j, k);
+  fmt::print("response: {}\n", std::get<0>(r2.value()));
 
   server_thread.join();
 

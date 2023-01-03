@@ -30,9 +30,9 @@ public:
   template <typename MemberFunctionPointer>
   RpcStub(Service& service, MemberFunctionPointer mem_fn_ptr) : factory_fn_{service, mem_fn_ptr} {}
 
-  // Should return a sender... hopefully does not need access to the GrpcContext here
-  RpcSender<Service, RequestType, ResponseType> call(sgrpc::ExecutionContext& context,
-                                                     RequestType request) {
+  // The sender here is like a future.
+  PureRpcSender<Service, RequestType, ResponseType> call(sgrpc::ExecutionContext& context,
+                                                         RequestType request) {
     return {context, factory_fn_, std::move(request)};
   }
 

@@ -15,10 +15,9 @@
 
 namespace sgrpc {
 
-using thunk_type = std::function<void()>;
-using deadlined_thunk_type = std::function<void(bool)>;
-using rpc_call_factory =
-    std::function<std::unique_ptr<CompletionQueueEvent>(grpc::CompletionQueue&)>;
+using ThunkType = std::function<void()>;
+using DeadlinedThunkType = std::function<void(bool)>;
+using RpcFactory = std::function<std::unique_ptr<CompletionQueueEvent>(grpc::CompletionQueue&)>;
 
 enum class ExecutionState : int { Ready = 0, Running, ShuttingDown, Stopped };
 
@@ -43,10 +42,10 @@ public:
   //@}
 
   //@{ Posting events
-  bool post(thunk_type thunk);
-  bool post(deadlined_thunk_type thunk, std::chrono::steady_clock::time_point deadline);
-  bool post(deadlined_thunk_type thunk, std::chrono::nanoseconds delta);
-  bool post(rpc_call_factory call_factory);
+  bool post(ThunkType thunk);
+  bool post(DeadlinedThunkType thunk, std::chrono::steady_clock::time_point deadline);
+  bool post(DeadlinedThunkType thunk, std::chrono::nanoseconds delta);
+  bool post(RpcFactory call_factory);
   //@}
 
   //@{ Action!
@@ -63,9 +62,9 @@ private:
 
   mutable std::mutex padlock_;
   std::vector<std::thread> threads_;
-  AtomicTaskStealingQueue<thunk_type> task_queue_; //!< For things not pushed onto cqs_
+  AtomicTaskStealingQueue<ThunkType> task_queue_; //!< For things not pushed onto cqs_
   std::vector<std::unique_ptr<grpc::CompletionQueue>> cqs_;
-  std::vector<std::function<void()>> notifications_; //!< For when stopped and drained
+  std::vector<ThunkType> notifications_; //!< For when stopped and drained
   std::atomic<ExecutionState> state_{ExecutionState::Ready};
   mutable std::atomic<std::size_t> next_cq_write_index_{0};
   mutable std::atomic<std::size_t> in_cq_post_{0};
