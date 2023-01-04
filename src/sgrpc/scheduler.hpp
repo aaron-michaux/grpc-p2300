@@ -1,8 +1,6 @@
 
 #pragma once
 
-#include "sender.hpp"
-
 #include "detail/base_inc.hpp"
 
 namespace sgrpc {

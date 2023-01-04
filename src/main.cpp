@@ -39,10 +39,6 @@ std::tuple<int, int, int> sumit(int x, int y, int z) { return {x, x + y, x + y +
 
 int main(int, char**) {
 
-  if (1 > 0) {
-    fmt::print("Hello!\n");
-  }
-
   std::thread server_thread{GreetingServer::run_server};
 
   sgrpc::ExecutionContext ctx{2, 1};

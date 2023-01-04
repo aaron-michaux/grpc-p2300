@@ -82,7 +82,7 @@ struct PureRpcSenderOpState {
 };
 
 /**
- *
+ * The setup CallData for creating a type-erased Rpc
  */
 template <typename Service, typename RequestType, typename ResponseType, typename ResultType,
           typename ConversionFunction>

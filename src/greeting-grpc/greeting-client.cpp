@@ -3,8 +3,7 @@
 
 #include "greeting-client.h"
 
-#include "sgrpc/rpc_call.hpp"
-#include "sgrpc/call_stub.hpp"
+#include "sgrpc/rpc_stub.hpp"
 
 #include <protos/helloworld.grpc.pb.h>
 
