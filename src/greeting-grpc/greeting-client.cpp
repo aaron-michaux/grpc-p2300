@@ -22,16 +22,14 @@ struct Client::Impl_ {
   using Service = helloworld::Greeter::Stub;
 
   explicit Impl_(sgrpc::ExecutionContext& context, std::shared_ptr<grpc::Channel> channel)
-      : context_{context},                                         //
-        stub_{helloworld::Greeter::NewStub(channel)},              //
-        stub_say_hello_r_{*stub_, &Service::PrepareAsyncSayHello}, //
-        stub_say_hello_{*stub_, &Service::PrepareAsyncSayHello}    //
+      : context_{context},                                      //
+        stub_{helloworld::Greeter::NewStub(channel)},           //
+        stub_say_hello_{*stub_, &Service::PrepareAsyncSayHello} //
   {}
 
   sgrpc::ExecutionContext& context_;
   std::unique_ptr<Service> stub_;
-  sgrpc::RpcStub<Service, helloworld::HelloRequest, helloworld::HelloReply> stub_say_hello_r_;
-  sgrpc::WrappedRpcStub<Service, helloworld::HelloRequest, helloworld::HelloReply> stub_say_hello_;
+  sgrpc::RpcStub<Service, helloworld::HelloRequest, helloworld::HelloReply> stub_say_hello_;
 };
 
 Client::Client(sgrpc::ExecutionContext& context, std::shared_ptr<grpc::Channel> channel)
@@ -86,11 +84,6 @@ std::string Client::sync_say_hello(std::string_view user) {
   } else {
     return "RPC failed";
   }
-}
-
-sgrpc::PureRpcSender<Client::Service, HelloRequest, HelloReply>
-Client::say_hello(HelloRequest request) {
-  return impl_->stub_say_hello_r_.call(impl_->context_, std::move(request));
 }
 
 sgrpc::RpcSender<std::string> Client::say_hello(std::string user) {

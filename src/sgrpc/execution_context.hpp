@@ -2,7 +2,7 @@
 #pragma once
 
 #include "detail/atomic_task_stealing_queue.hpp"
-#include "completion_queue_event.hpp"
+#include "detail/completion_queue_event.hpp"
 
 #include <grpcpp/completion_queue.h>
 

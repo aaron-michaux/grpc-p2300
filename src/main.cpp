@@ -53,9 +53,6 @@ int main(int, char**) {
   Greeting::Client client{ctx, channel}; // TODO: create with a scheduler (?)
   ctx.run();
 
-  helloworld::HelloRequest request;
-  request.set_name("Pius!");
-
   // Describe some work:
   auto fun = [](int i) { return compute(i); };
   auto work = stdexec::when_all(stdexec::on(sched, stdexec::just(0) | stdexec::then(fun)),
@@ -64,9 +61,6 @@ int main(int, char**) {
               | stdexec::then(sumit);
 
   auto snd = client.say_hello("Tritarch");
-
-  auto result = client.sync_say_hello("Metellus");
-  fmt::print("{}\n", result);
 
   // Launch the work and wait for the result:
   auto [i, j, k] = std::get<0>(stdexec::sync_wait(std::move(work)).value());
