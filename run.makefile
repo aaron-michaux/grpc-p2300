@@ -23,6 +23,8 @@ BOOST_DEFINES:=-DBOOST_NO_TYPEID -DBOOST_ERROR_CODE_HEADER_ONLY -DBOOST_ASIO_SEP
 DEFINES:=$(BOOST_DEFINES) -DUSE_ASIO -DFMT_HEADER_ONLY
 WARNINGS:=-Wno-variadic-macros
 
+TSAN_DEFINES:=-DDYNAMIC_ANNOTATIONS_ENABLED=1 -DDYNAMIC_ANNOTATIONS_EXTERNAL_IMPL=1 -DEVENT__DISABLE_DEBUG_MODE -DBUILD_OPTION_USE_TSAN
+
 GRPC_LIBS:=-lgrpc++ -lgrpc -lgpr -lupb -laddress_sorting -lprotobuf -lre2 -lcares -labsl  
 SYS_LIBS:=-lssl -lcrypto -lz -lpthread
 
@@ -31,6 +33,10 @@ CPPFLAGS:=
 CXXFLAGS:=$(INCDIRS) $(DEFINES) $(WARNINGS)
 LDFLAGS:=
 LIBS:=-lunifex $(GRPC_LIBS) $(SYS_LIBS)
+
+ifeq ($(BUILD_CONFIG), tsan)
+   CPPFLAGS:=$(TSAN_DEFINES)
+endif
 
 # --------------------------------------------------------------------------- Add Source Directories
 

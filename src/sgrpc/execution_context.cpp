@@ -60,6 +60,7 @@ bool ExecutionContext::post(DeadlinedThunkType thunk, std::chrono::nanoseconds d
   bool can_post = get_state() <= ExecutionState::Running;
 
   if (can_post) {
+    // The alarms lifecycle is managed by the completion queue
     new detail::Alarm{get_next_cq(), std::move(thunk), detail::duration_to_grp_timespec(delta)};
   }
 
@@ -73,7 +74,8 @@ bool ExecutionContext::post(RpcFactory call_factory) {
   bool can_post = get_state() <= ExecutionState::Running;
 
   if (can_post) {
-    call_factory(get_next_cq()).release();
+    auto* event = call_factory(get_next_cq()).release();
+    (void)event; // The event's lifecycle is managed by the completion queue.
   }
 
   in_cq_post_.fetch_sub(1, std::memory_order_acq_rel);
@@ -158,9 +160,8 @@ void ExecutionContext::run_one_thread_(unsigned thread_number, std::function<boo
         if (status == grpc::CompletionQueue::NextStatus::SHUTDOWN) {
           ++shutdown_cq_count; // cq is shutdown and fully drained
         } else if (status == grpc::CompletionQueue::NextStatus::GOT_EVENT) {
-          auto event = static_cast<CompletionQueueEvent*>(tag);
+          std::unique_ptr<CompletionQueueEvent> event{static_cast<CompletionQueueEvent*>(tag)};
           event->complete(is_ok);
-          delete event;
           at_least_one_thing_executed = true;
         }
       }
