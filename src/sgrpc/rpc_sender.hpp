@@ -33,9 +33,9 @@ public:
   PureRpcSender(ExecutionContext& context,
                 ResponseReaderFactory<Service, RequestType, ResponseType> factory_fn,
                 RequestType request)
-      : context_{context},                                          //
-        factory_fn_{std::move(factory_fn)},                         //
-        request_{std::make_shared<RequestType>(std::move(request))} //
+      : context_{context},                  //
+        factory_fn_{std::move(factory_fn)}, //
+        request_{std::move(request)}        //
   {}
 
 private:

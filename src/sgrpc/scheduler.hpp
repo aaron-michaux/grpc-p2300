@@ -61,5 +61,3 @@ private:
 };
 
 } // namespace sgrpc
-
-// } // namespace unifex::_schedule

@@ -83,7 +83,7 @@ show_usage()
       > $(basename $0) unity release
 
       # Make html test coverage using clang-14, passing arguments "1" "2" "3" to the executable
-      > $(basename $0) clang-15 coveragehtml -- 1 2 3
+      > $(basename $0) clang-15 coverage -- 1 2 3
 
 EOF
 }

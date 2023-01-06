@@ -9,10 +9,14 @@
 
 namespace sgrpc {
 
-template <typename RequestType, typename ResponseType>
+/**
+ * Factory for creating the correct type of grpc response reader for a given
+ * grpc::ClientContext. The factory method should internalize the request arguments.
+ */
+template <typename ResponseType>
 using AsyncReaderFactory =
     std::function<std::unique_ptr<grpc::ClientAsyncResponseReader<ResponseType>>(
-        grpc::ClientContext& client_context_, RequestType request)>;
+        grpc::ClientContext& client_context)>;
 
 template <typename ResponseType>
 using CompletionThunk =
@@ -21,13 +25,12 @@ using CompletionThunk =
 /**
  * An "in-flight" RPC call; lives on the heap; lifecycle managed externally
  */
-template <typename RequestType, typename ResponseType>
-class InflightRpc : public CompletionQueueEvent {
+template <typename ResponseType> class InflightRpc : public CompletionQueueEvent {
 public:
-  InflightRpc(AsyncReaderFactory<RequestType, ResponseType> response_reader_factory,
-              RequestType request, CompletionThunk<ResponseType> thunk)
+  InflightRpc(AsyncReaderFactory<ResponseType> response_reader_factory,
+              CompletionThunk<ResponseType> thunk)
       : completion_{std::move(thunk)} {
-    response_reader_ = response_reader_factory(client_context_, std::move(request));
+    response_reader_ = response_reader_factory(client_context_);
     response_reader_->StartCall();
     response_reader_->Finish(&response_, &status_, this); // scheduled
     // the underlying grpc machinery now owns the lifecycle of `this`

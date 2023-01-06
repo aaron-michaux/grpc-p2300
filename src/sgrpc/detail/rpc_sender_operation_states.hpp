@@ -29,7 +29,7 @@ template <typename Service, typename RequestType, typename ResponseType, typenam
 struct PureRpcSenderOpState {
   ExecutionContext& context_;
   ResponseReaderFactory<Service, RequestType, ResponseType> factory_fn_;
-  std::shared_ptr<RequestType> request_;
+  RequestType request_;
   [[no_unique_address]] Receiver receiver_;
 
   template <typename Message>
@@ -43,9 +43,8 @@ struct PureRpcSenderOpState {
     const bool invoked = context_.post(
         [this](grpc::CompletionQueue& cq) mutable -> std::unique_ptr<CompletionQueueEvent> {
           // Factory for creating the correct response writer type
-          auto reader_factory = [this, &cq](grpc::ClientContext& client_context,
-                                            RequestType request) mutable {
-            return factory_fn_(&client_context, std::move(request), &cq);
+          auto reader_factory = [this, &cq](grpc::ClientContext& client_context) mutable {
+            return factory_fn_(&client_context, std::move(request_), &cq);
           };
 
           // Sets the value on the receiver when the rpc call completes
@@ -70,8 +69,8 @@ struct PureRpcSenderOpState {
             }
           };
 
-          return std::make_unique<InflightRpc<RequestType, ResponseType>>(
-              std::move(reader_factory), std::move(*request_), std::move(completion));
+          return std::make_unique<InflightRpc<ResponseType>>(std::move(reader_factory),
+                                                             std::move(completion));
         });
 
     if (!invoked) { // Immediately set the value to "CANCELLED"
@@ -93,9 +92,8 @@ struct CallData {
   WrappedCompletionHandler<ResultType> completion;                      //!< Put result on Receiver
 
   std::unique_ptr<CompletionQueueEvent> operator()(grpc::CompletionQueue& cq) {
-    auto factory = [fn = std::move(factory_fn), &cq](grpc::ClientContext& client_context,
-                                                     RequestType request) mutable {
-      return fn(&client_context, std::move(request), &cq);
+    auto factory = [this, &cq](grpc::ClientContext& client_context) mutable {
+      return factory_fn(&client_context, std::move(request), &cq);
     };
 
     auto curried_completion = [completion = std::move(completion)](bool is_ok,
@@ -115,8 +113,8 @@ struct CallData {
       }
     };
 
-    return std::make_unique<InflightRpc<RequestType, ResponseType>>(
-        std::move(factory), std::move(request), std::move(curried_completion));
+    return std::make_unique<InflightRpc<ResponseType>>(std::move(factory),
+                                                       std::move(curried_completion));
   }
 };
 
