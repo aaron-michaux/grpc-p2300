@@ -2,7 +2,13 @@
 
 set -e
 
+# ------------------------------------------------------------------ Environment
+
 PPWD="$(cd "$(dirname "$0")"; pwd)"
+
+SHELL_SCRIPTS_ROOT_DIR="$PPWD/modules/shell-scripts"
+export BUILD_CONTRIB_SCRIPT_DIR="$SHELL_SCRIPTS_ROOT_DIR/build-contrib"
+export TOOLCHAIN_CONFIG_DIR="$SHELL_SCRIPTS_ROOT_DIR/toolchain-config"
 
 # ------------------------------------------------------------ Parse Commandline
 
@@ -29,7 +35,6 @@ CXXSTD="-std=c++2b"
 STDLIB="stdcxx"
 COMPDB="False"
 TARGET_OVERRIDE=""
-NIGGLY_ROOT_DIR="$PPWD/modules/niggly"
 MAKEFILE="run.makefile"
 NPROC="-j$(nproc)"
 
@@ -179,7 +184,7 @@ do_make
 
 if [ "$TARGET_OVERRIDE" = "" ] ; then
 
-    SUPP_DIR="$NIGGLY_ROOT_DIR/toolchain-config/suppressions"
+    SUPP_DIR="$TOOLCHAIN_CONFIG_DIR/suppressions"
     
     export LSAN_OPTIONS="suppressions=$SUPP_DIR/lsan.supp"
     export ASAN_OPTIONS="protect_shadow_gap=0,detect_leaks=0"
@@ -196,7 +201,7 @@ if [ "$TARGET_OVERRIDE" = "" ] ; then
         exit 1
     fi
     
-    source "$NIGGLY_ROOT_DIR/bin/env/platform-env.sh"
+    source "$BUILD_CONTRIB_SCRIPT_DIR/env/platform-env.sh"
     VALGRIND_EXE="$TOOLS_DIR/bin/valgrind"
     
     RET=0    

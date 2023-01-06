@@ -82,8 +82,9 @@ ifneq ("$(MKFILE_DIR)", "$(CURDIR)")
 endif
 
 # Add base makefile rules
-NIGGLY_ROOT_DIR:=$(CURDIR)/modules/niggly
-BASE_MAKE_FILE:=$(NIGGLY_ROOT_DIR)/toolchain-config/base.inc.makefile
+BUILD_CONTRIB_SCRIPT_DIR?=$(CURDIR)/modules/shell-scripts/build-contrib
+TOOLCHAIN_CONFIG_DIR?=$(CURDIR)/modules/shell-scripts/toolchain-config
+BASE_MAKE_FILE:=$(TOOLCHAIN_CONFIG_DIR)/base.inc.makefile
 include $(BASE_MAKE_FILE)
 
 # -------------------------------------------------------------------------------------------- Rules
