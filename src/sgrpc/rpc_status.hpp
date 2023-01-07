@@ -53,7 +53,4 @@ class RpcStatus
    std::error_code error_code_;
 };
 
-// constexpr Status StatusOk{StatusCode::Ok};
-// constexpr Status Cancelled{StatusCode::Cancelled};
-
 } // namespace sgrpc

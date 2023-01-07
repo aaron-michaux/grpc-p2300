@@ -32,7 +32,7 @@ CFLAGS:=$(INCDIRS) $(DEFINES) $(WARNINGS)
 CPPFLAGS:=
 CXXFLAGS:=$(INCDIRS) $(DEFINES) $(WARNINGS)
 LDFLAGS:=
-LIBS:=-lunifex $(GRPC_LIBS) $(SYS_LIBS)
+LIBS:=$(GRPC_LIBS) $(SYS_LIBS)
 
 ifeq ($(BUILD_CONFIG), tsan)
    CPPFLAGS:=$(TSAN_DEFINES)
@@ -75,7 +75,7 @@ endif
 
 # ---------------------------------------------------------------------------- Include base makefile
 # Check that we're in the correct directory
-MKFILE_PATH:=$(abspath $(lastword $(MAKEFILE_LIST)))
+MKFILE_PATH:=$(abspath $(lastword $(MAKEFILE_LIST))/..)
 MKFILE_DIR:=$(patsubst %/,%,$(dir $(MKFILE_PATH)))
 ifneq ("$(MKFILE_DIR)", "$(CURDIR)")
   $(error Should run from $(MKFILE_DIR) not $(CURDIR))

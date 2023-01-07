@@ -35,7 +35,7 @@ CXXSTD="-std=c++2b"
 STDLIB="stdcxx"
 COMPDB="False"
 TARGET_OVERRIDE=""
-MAKEFILE="run.makefile"
+MAKEFILE="config/run.makefile"
 NPROC="-j$(nproc)"
 
 show_usage()
@@ -184,10 +184,11 @@ do_make
 
 if [ "$TARGET_OVERRIDE" = "" ] ; then
 
-    SUPP_DIR="$TOOLCHAIN_CONFIG_DIR/suppressions"
+    SUPP_DIR="config/suppressions"
     
-    export LSAN_OPTIONS="suppressions=$SUPP_DIR/lsan.supp"
-    export ASAN_OPTIONS="protect_shadow_gap=0,detect_leaks=0"
+    export ASAN_OPTIONS="suppressions=$SUPP_DIR/asan.supp,protect_shadow_gap=0,detect_leaks=0"
+    export TSAN_OPTIONS="suppressions=$SUPP_DIR/tsan.supp"
+    export UBSAN_OPTIONS="suppressions=$SUPP_DIR/usan.supp"
     export TF_CPP_MIN_LOG_LEVEL="1"
     export AUTOGRAPH_VERBOSITY="1"
 
