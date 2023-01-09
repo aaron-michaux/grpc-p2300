@@ -38,6 +38,17 @@ using RpcLogicThunk
 
 /**
  * @brief Context for handling servier-side RPC requests
+ *
+ * Something like:
+ * ~~~
+ * new ServerRpcContext(std::mem_fn(&GreetingService::RequestSayHello),
+ *                      [] (const grpc::ServerContext& context, const RequestType& request)
+ *                         -> RpcSender<RequestType>
+ *                      {
+ *                          ...
+ *                      },
+ *                      server_completion_queue);
+ * ~~~
  */
 template<typename RequestType,
          typename ResponseType,
@@ -72,7 +83,7 @@ class ServerRpcContext : public CompletionQueueEvent
          delete_on_next_complete_ = true;
 
          // Spawn the service logic
-         auto sender = logic_(server_context_, request_, response_);
+         auto sender = logic_(server_context_, request_);
          then(sender,
               [this](grpc::Status status) { response_writer_.Finish(response_, status, this); });
       } else {
