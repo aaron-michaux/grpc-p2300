@@ -1,32 +1,37 @@
 
 #pragma once
 
-#include <grpcpp/grpcpp.h>
+#include "sgrpc/sgrpc.hpp"
 
-#include "sgrpc/execution_context.hpp"
-#include "sgrpc/rpc_sender.hpp"
-
-namespace Greeting {
+namespace Greeting
+{
 
 /**
- * Rpc client: pack and unpack protobuf envelops to types
- *             separate channel for errors
- *             separate channel for cancels
- *             type-erase the protobuf types, and service.
+ * The client side of the
  */
+class Client final
+{
+ public:
+   //@{ Construction/Destruction
+   /**
+    * @param context The execution engine to process asynchronous events
+    * @param channel The channel through which to connect to the server
+    */
+   explicit Client(sgrpc::ExecutionContext& context, std::shared_ptr<grpc::Channel> channel);
+   ~Client();
+   //@}
 
-class Client {
-public:
-  explicit Client(sgrpc::ExecutionContext& context, std::shared_ptr<grpc::Channel> channel);
-  ~Client();
+   /**
+    * Returns a sender<string> (like a future) result
+    */
+   sgrpc::RpcSender<std::string> say_hello(std::string user);
 
-  std::string sync_say_hello(std::string_view user); // Should return a "future"... a "Sender"
-
-  sgrpc::RpcSender<std::string> say_hello(std::string user);
-
-private:
-  struct Impl_;
-  std::unique_ptr<Impl_> impl_;
+ private:
+   /**
+    * Use a private implementation to type-erase the client from the underlying grpc types.
+    */
+   struct Impl_;
+   std::unique_ptr<Impl_> impl_;
 };
 
 } // namespace Greeting

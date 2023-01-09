@@ -7,8 +7,8 @@
 #include "sgrpc/execution_context.hpp"
 #include "sgrpc/scheduler.hpp"
 
-#include <stdexec/execution.hpp>
 #include <exec/static_thread_pool.hpp>
+#include <stdexec/execution.hpp>
 
 #include <thread>
 
@@ -29,45 +29,46 @@
  *    start(operation_state) -> void
  */
 
-class SomeClass {
-public:
-  void fn(int b) { fmt::print("b = {}\n", b); }
+class SomeClass
+{
+ public:
+   void fn(int b) { fmt::print("b = {}\n", b); }
 };
 
 int compute(int x) { return x + 1; }
 std::tuple<int, int, int> sumit(int x, int y, int z) { return {x, x + y, x + y + z}; }
 
-int main(int, char**) {
+int main(int, char**)
+{
+   std::thread server_thread{Greeting::run_server};
 
-  std::thread server_thread{GreetingServer::run_server};
+   sgrpc::ExecutionContext ctx{2, 1};
+   stdexec::scheduler auto sched = sgrpc::Scheduler{ctx};
 
-  sgrpc::ExecutionContext ctx{2, 1};
-  stdexec::scheduler auto sched = sgrpc::Scheduler{ctx};
+   auto channel = grpc::CreateChannel("localhost:50051", grpc::InsecureChannelCredentials());
 
-  auto channel = grpc::CreateChannel("localhost:50051", grpc::InsecureChannelCredentials());
+   Greeting::Client client{ctx, channel}; // TODO: create with a scheduler (?)
+   ctx.run();
 
-  Greeting::Client client{ctx, channel}; // TODO: create with a scheduler (?)
-  ctx.run();
+   // Describe some work:
+   auto fun  = [](int i) { return compute(i); };
+   auto work = stdexec::when_all(stdexec::on(sched, stdexec::just(0) | stdexec::then(fun)),
+                                 stdexec::on(sched, stdexec::just(1) | stdexec::then(fun)),
+                                 stdexec::on(sched, stdexec::just(2) | stdexec::then(fun))) //
+               | stdexec::then(sumit);
 
-  // Describe some work:
-  auto fun = [](int i) { return compute(i); };
-  auto work = stdexec::when_all(stdexec::on(sched, stdexec::just(0) | stdexec::then(fun)),
-                                stdexec::on(sched, stdexec::just(1) | stdexec::then(fun)),
-                                stdexec::on(sched, stdexec::just(2) | stdexec::then(fun))) //
-              | stdexec::then(sumit);
+   auto snd = client.say_hello("Tritarch");
 
-  auto snd = client.say_hello("Tritarch");
+   // Launch the work and wait for the result:
+   auto [i, j, k] = std::get<0>(stdexec::sync_wait(std::move(work)).value());
 
-  // Launch the work and wait for the result:
-  auto [i, j, k] = std::get<0>(stdexec::sync_wait(std::move(work)).value());
+   auto r2 = stdexec::sync_wait(std::move(snd));
 
-  auto r2 = stdexec::sync_wait(std::move(snd));
+   // Print the results:
+   fmt::print("{}, {}, {}\n", i, j, k);
+   fmt::print("response: {}\n", std::get<0>(r2.value()));
 
-  // Print the results:
-  fmt::print("{}, {}, {}\n", i, j, k);
-  fmt::print("response: {}\n", std::get<0>(r2.value()));
+   server_thread.join();
 
-  server_thread.join();
-
-  return EXIT_SUCCESS;
+   return EXIT_SUCCESS;
 }

@@ -28,10 +28,94 @@
 #include <string>
 #include <thread>
 
-namespace GreetingServer
+namespace Greeting
 {
+// # -- Private Implemenation
 
-using grpc::Server;
+struct Server::Impl_
+{
+ public:
+   Impl_(sgrpc::ExecutionContext& execution_context, uint32_t number_work_queues, uint16_t port)
+       : execution_context_{execution_context}
+       , number_work_queues_{number_work_queues}
+       , port_{port}
+   {
+      // if port is zero, then what?
+      assert(number_work_queues_ > 0);
+   }
+
+   uint16_t start(std::shared_ptr<grpc::ServerCredentials> credentials)
+   {
+      // Ensure that this is done at most one time
+      bool expected = false;
+      if(!is_started_.compare_exchange_strong(expected, true, std::memory_order_acq_rel)) {
+         throw std::runtime_error("attempt to start the server more than once");
+      }
+
+      // Set the listening port for this server
+      std::string server_address(fmt::format("0.0.0.0:{}", port_));
+      int selected_port = static_cast<int>(port_);
+      builder.AddListeningPort(server_address, std::move(credentials), &selected_port);
+
+      // The instance through which RPCs are handled
+      builder.RegisterService(&service_);
+
+      // Create the work queues
+      std::vector<std::unique_ptr<grpc::ServerCompletionQueue>> queues;
+      queues.reserve(number_work_queues_);
+      for(auto i = 0u; i < number_work_queues_; ++i) queues.push_back(builder.AddCompletionQueue());
+
+      // Assemble the server.
+      server_ = builder.BuildAndStart();
+
+      // What port did we get?
+      if(port_ == 0) port_ = static_cast<uint16_t>(selected_port);
+      assert(port_ == static_cast<uint16_t>(selected_port));
+
+      // Register RPC callbacks onto the server completion queues
+      register_rpc_callbacks_(queues);
+
+      // Attach work-queues to the execution context... these queues live as long as the context
+      execution_context_.append_server_completion_queues(std::move(queues));
+
+      // Retun the port in use
+      return port_;
+   }
+
+ private:
+   void register_rpc_callbacks_(auto& queues)
+   {
+      //
+   }
+
+   sgrpc::ExecutionContext& execution_context_;
+   grpc::ServerBuilder builder;
+   helloworld::Greeter::AsyncService service_;
+   std::unique_ptr<grpc::Server> server_;
+   grpc::ServerContext ctx_;
+   std::atomic<bool> is_started_{false};
+   uint32_t number_work_queues_{0};
+   uint16_t port_{0};
+};
+
+// # -- Construction/Destruction
+
+Server::Server(sgrpc::ExecutionContext& execution_context,
+               uint32_t number_work_queues,
+               uint16_t port)
+    : impl_{std::make_unique<Impl_>(execution_context, number_work_queues, port)}
+{}
+
+Server::~Server() {}
+
+// # -- Action
+
+uint16_t Server::start(std::shared_ptr<grpc::ServerCredentials> credentials)
+{
+   return impl_->start(std::move(credentials));
+}
+
+// using grpc::Server;
 using grpc::ServerAsyncResponseWriter;
 using grpc::ServerBuilder;
 using grpc::ServerCompletionQueue;
@@ -170,7 +254,7 @@ class ServerImpl final
 
    std::unique_ptr<ServerCompletionQueue> cq_;
    Greeter::AsyncService service_;
-   std::unique_ptr<Server> server_;
+   std::unique_ptr<grpc::Server> server_;
 };
 
 void run_server()
@@ -179,4 +263,4 @@ void run_server()
    server.Run();
 }
 
-} // namespace GreetingServer
+} // namespace Greeting
