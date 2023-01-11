@@ -8,37 +8,33 @@ namespace Greeting
 
 class Server final
 {
+ private:
+   Server();
+
  public:
    //@{ Construction/Destruction
-   /**
-    * @param execution_context The ExecutionContext that processes events (after `start()`).
-    * @param number_work_queues The number of work (server-completion) queues to create.
-    * @param port The port to listen on; if zero is passed, then a port is selected.
-    *
-    * Lifecycle:
-    * + The Server object must live until `execution_context` has stopped.
-    */
-   explicit Server(sgrpc::ExecutionContext& execution_context,
-                   uint32_t number_work_queues = 1,
-                   uint16_t port               = 0);
    ~Server();
-   //@}
 
-   //@{ Action!
    /**
-    * If constructed with `port == 0`, then a port is selected.
+    * Creates a new server (instance)
+    *
+    * @param number_server_work_queues The number of work (server-completion) queues to create.
+    * @param port The port to listen on; if zero is passed, then a port is selected.
+    * @param credentials The grpc credentials, if any.
     * @return The port listening on.
     */
-   uint16_t start(std::shared_ptr<grpc::ServerCredentials> credentials
-                  = grpc::InsecureServerCredentials());
+   Server make(sgrpc::ExecutionContext& execution_context,
+               uint32_t number_server_work_queues = 1,
+               uint16_t port                      = 0,
+               std::shared_ptr<grpc::ServerCredentials> credentials
+               = grpc::InsecureServerCredentials()) noexcept(false);
    //@}
 
+   uint16_t get_port() const; //!< The port this server is listening on
+
  private:
-   /**
-    * Use a private implementation to type-erase the server from the underlying grpc types.
-    */
-   struct Impl_;
-   std::unique_ptr<Impl_> impl_;
+   class Impl;
+   std::shared_ptr<Impl> impl_; // A copy of `impl` is given to execution_context
 };
 
 void run_server();

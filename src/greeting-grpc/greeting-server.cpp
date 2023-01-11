@@ -32,38 +32,49 @@ namespace Greeting
 {
 // # -- Private Implemenation
 
-struct Server::Impl_
+class Server::Impl : public sgrpc::ServerInterface, public std::enable_shared_from_this<Impl>
 {
  public:
-   Impl_(sgrpc::ExecutionContext& execution_context, uint32_t number_work_queues, uint16_t port)
+   Impl(sgrpc::ExecutionContext& execution_context)
        : execution_context_{execution_context}
-       , number_work_queues_{number_work_queues}
-       , port_{port}
+   {}
+
+   static std::shared_ptr<Impl> make(sgrpc::ExecutionContext& execution_context,
+                                     uint32_t number_work_queues,
+                                     uint16_t port,
+                                     std::shared_ptr<grpc::ServerCredentials> credentials)
    {
-      // if port is zero, then what?
-      assert(number_work_queues_ > 0);
+      auto impl = std::make_shared<Impl>(execution_context);
+      if(!impl->init(number_work_queues, port, std::move(credentials))) { return nullptr; }
+      return impl;
    }
 
-   uint16_t start(std::shared_ptr<grpc::ServerCredentials> credentials)
+   uint16_t get_port() const { return port_; }
+
+   std::vector<std::unique_ptr<grpc::ServerCompletionQueue>>& get_work_queues() override
    {
-      // Ensure that this is done at most one time
-      bool expected = false;
-      if(!is_started_.compare_exchange_strong(expected, true, std::memory_order_acq_rel)) {
-         throw std::runtime_error("attempt to start the server more than once");
-      }
+      return cqs_;
+   }
+
+ private:
+   bool init(uint32_t number_work_queues,
+             uint16_t port,
+             std::shared_ptr<grpc::ServerCredentials> credentials)
+   {
+      // if port is zero, then what?
+      if(number_work_queues == 0) throw std::invalid_argument{"requires at least 1 work queue"};
 
       // Set the listening port for this server
-      std::string server_address(fmt::format("0.0.0.0:{}", port_));
-      int selected_port = static_cast<int>(port_);
+      std::string server_address(fmt::format("0.0.0.0:{}", port));
+      int selected_port = static_cast<int>(port);
       builder.AddListeningPort(server_address, std::move(credentials), &selected_port);
 
       // The instance through which RPCs are handled
       builder.RegisterService(&service_);
 
       // Create the work queues
-      std::vector<std::unique_ptr<grpc::ServerCompletionQueue>> queues;
-      queues.reserve(number_work_queues_);
-      for(auto i = 0u; i < number_work_queues_; ++i) queues.push_back(builder.AddCompletionQueue());
+      cqs_.reserve(number_work_queues);
+      for(auto i = 0u; i < number_work_queues; ++i) cqs_.push_back(builder.AddCompletionQueue());
 
       // Assemble the server.
       server_ = builder.BuildAndStart();
@@ -73,47 +84,49 @@ struct Server::Impl_
       assert(port_ == static_cast<uint16_t>(selected_port));
 
       // Register RPC callbacks onto the server completion queues
-      register_rpc_callbacks_(queues);
+      register_rpc_callbacks_();
 
       // Attach work-queues to the execution context... these queues live as long as the context
-      execution_context_.append_server_completion_queues(std::move(queues));
+      execution_context_.attach_server(shared_from_this());
 
       // Retun the port in use
-      return port_;
+      return true;
    }
 
- private:
-   void register_rpc_callbacks_(auto& queues)
+   void register_rpc_callbacks_()
    {
       //
    }
 
+   grpc::ServerBuilder builder; // Can this move into init()? I Think so
+   grpc::ServerContext ctx_;    // I think this can go
+
    sgrpc::ExecutionContext& execution_context_;
-   grpc::ServerBuilder builder;
    helloworld::Greeter::AsyncService service_;
    std::unique_ptr<grpc::Server> server_;
-   grpc::ServerContext ctx_;
-   std::atomic<bool> is_started_{false};
-   uint32_t number_work_queues_{0};
+   std::vector<std::unique_ptr<grpc::ServerCompletionQueue>> cqs_;
    uint16_t port_{0};
 };
 
 // # -- Construction/Destruction
 
-Server::Server(sgrpc::ExecutionContext& execution_context,
-               uint32_t number_work_queues,
-               uint16_t port)
-    : impl_{std::make_unique<Impl_>(execution_context, number_work_queues, port)}
-{}
-
+Server::Server() {}
 Server::~Server() {}
 
-// # -- Action
-
-uint16_t Server::start(std::shared_ptr<grpc::ServerCredentials> credentials)
+Server Server::make(sgrpc::ExecutionContext& execution_context,
+                    uint32_t number_server_work_queues,
+                    uint16_t port,
+                    std::shared_ptr<grpc::ServerCredentials> credentials) noexcept(false)
 {
-   return impl_->start(std::move(credentials));
+   Server server;
+   server.impl_
+       = Impl::make(execution_context, number_server_work_queues, port, std::move(credentials));
+   return server;
 }
+
+// # -- Getters
+
+uint16_t Server::get_port() const { return impl_->get_port(); }
 
 // using grpc::Server;
 using grpc::ServerAsyncResponseWriter;

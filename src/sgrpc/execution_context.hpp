@@ -3,6 +3,7 @@
 
 #include "detail/atomic_task_stealing_queue.hpp"
 #include "detail/completion_queue_event.hpp"
+#include "server_interface.hpp"
 
 #include <grpcpp/completion_queue.h>
 
@@ -40,12 +41,12 @@ class ExecutionContext final
    bool is_stopped() const noexcept { return get_state() == ExecutionState::Stopped; }
    //@}
 
-   //@{Setters
+   //@{ Mutation
    /**
-    * This method must be called before `run()`
+    * This method must be called before `run()`. The attached server's lifetime is
+    * extended until after `stop()`.
     */
-   void append_server_completion_queues(
-       std::vector<std::unique_ptr<grpc::ServerCompletionQueue>> queues);
+   void attach_server(std::shared_ptr<ServerInterface> server);
    //@}
 
    //@{ Posting events
@@ -76,7 +77,8 @@ class ExecutionContext final
    std::vector<std::thread> threads_;
    AtomicTaskStealingQueue<ThunkType> task_queue_; //!< For things not pushed onto cqs_
    std::vector<std::unique_ptr<grpc::CompletionQueue>> cqs_;
-   std::vector<std::unique_ptr<grpc::ServerCompletionQueue>> server_cqs_;
+   std::vector<std::shared_ptr<ServerInterface>> servers_;
+
    std::vector<ThunkType> notifications_; //!< For when stopped and drained
    std::atomic<ExecutionState> state_{ExecutionState::Ready};
    mutable std::atomic<std::size_t> next_cq_write_index_{0};

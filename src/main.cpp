@@ -39,6 +39,7 @@ int compute(int x) { return x + 1; }
 
 std::string sumit(int x, int y, int z, std::string s)
 {
+   throw std::runtime_error("ff");
    return fmt::format("({}, {}, {}), {}\n", x, y, z, s);
 }
 
@@ -57,13 +58,19 @@ int main(int, char**)
    stdexec::sender auto snd = client.say_hello("Tritarch");
 
    // Describe some work:
-   auto fun  = [](int i) { return compute(i); };
-   auto work = stdexec::when_all(stdexec::on(sched, stdexec::just(0) | stdexec::then(fun)),
-                                 stdexec::on(sched, stdexec::just(1) | stdexec::then(fun)),
-                                 stdexec::on(sched, stdexec::just(2) | stdexec::then(fun)),
-                                 snd)
-               | stdexec::then(sumit)
-               | stdexec::let_value([&client](std::string s) { return client.say_hello(s); });
+   auto fun = [](int i) { return compute(i); };
+   stdexec::sender auto work
+       = stdexec::when_all(stdexec::on(sched, stdexec::just(0) | stdexec::then(fun)),
+                           stdexec::on(sched, stdexec::just(1) | stdexec::then(fun)),
+                           stdexec::on(sched, stdexec::just(2) | stdexec::then(fun)),
+                           snd)
+         | stdexec::then(sumit)
+         | stdexec::let_value([&client](std::string s) { return client.say_hello(s); })
+         | stdexec::upon_error([](auto... arg) {
+              // fmt::print("status {}, {}", status.error_message(), status.details());
+              // fmt::print(args...);
+              return std::string{"dap"};
+           });
 
    // Launch the work and wait for the result:
    auto [result] = stdexec::sync_wait(std::move(work)).value();

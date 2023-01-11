@@ -26,8 +26,8 @@ class RpcStatus
    explicit RpcStatus(RpcStatusCode error_code = RpcStatusCode::Ok)
        : error_code_{to_error_code(error_code)}
    {}
-   RpcStatus(RpcStatusCode error_code, std::string message)
-       : details_{std::move(message)}
+   RpcStatus(RpcStatusCode error_code, std::string details)
+       : details_{std::move(details)}
        , error_code_{to_error_code(error_code)}
    {}
    RpcStatus(const RpcStatus& o) noexcept            = default;

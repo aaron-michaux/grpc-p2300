@@ -35,17 +35,14 @@ ExecutionContext::~ExecutionContext() { stop(); }
 
 // -- Setters
 
-void ExecutionContext::append_server_completion_queues(
-    std::vector<std::unique_ptr<grpc::ServerCompletionQueue>> queues)
+void ExecutionContext::attach_server(std::shared_ptr<ServerInterface> server)
 {
    std::lock_guard lock{padlock_};
    if(get_state() != ExecutionState::Ready) {
       throw std::runtime_error(
-          "attempt to add server-completion-queues to an already running execution-context");
+          "attempt to attach a server to an already running execution-context");
    }
-
-   server_cqs_.reserve(server_cqs_.size() + queues.size());
-   for(auto&& cq : queues) server_cqs_.push_back(std::move(cq));
+   servers_.push_back(std::move(server));
 }
 
 // -- Post
@@ -131,7 +128,8 @@ void ExecutionContext::stop()
 
    // Halt queues
    for(auto& cq : cqs_) cq->Shutdown();
-   for(auto& cq : server_cqs_) cq->Shutdown();
+   for(auto& server : servers_)
+      for(auto& cq : server->get_work_queues()) cq->Shutdown();
 
    // Join threads
    for(auto& thread : threads_) thread.join();
@@ -200,41 +198,39 @@ void ExecutionContext::run_one_thread_(unsigned thread_number, std::function<boo
       }
 
       try {
-         bool at_least_one_thing_executed = false;
-         std::size_t shutdown_cq_count    = 0;
+         uint32_t things_executed_count = 0;
+         uint32_t shutdown_cq_count     = 0;
+         uint32_t total_cq_count        = 0;
 
-         // Read from the client completion queue
-         for(auto i = 0u; i < cqs_.size() && !at_least_one_thing_executed; ++i) {
-            auto next_cq_index = (thread_number + i) % cqs_.size();
-            switch(execute_cq_(*cqs_[next_cq_index])) {
-            case CqExecutionResult::ExecutedNone: break;
-            case CqExecutionResult::ExecutedOne: at_least_one_thing_executed = true; break;
-            case CqExecutionResult::ShutdownRequested: ++shutdown_cq_count; break;
+         auto run_completion_queues = [&](auto& cqs) {
+            // Try to run at least one thing from this set of queues
+            total_cq_count += cqs.size();
+            auto current_count = things_executed_count;
+            for(auto i = 0u; i < cqs.size() && (current_count == things_executed_count); ++i) {
+               auto next_cq_index = (thread_number + i) % cqs.size();
+               switch(execute_cq_(*cqs[next_cq_index])) {
+               case CqExecutionResult::ExecutedNone: break;
+               case CqExecutionResult::ExecutedOne: ++things_executed_count; break;
+               case CqExecutionResult::ShutdownRequested: ++shutdown_cq_count; break;
+               }
             }
-         }
+         };
 
-         // Read from the server completion queues
-         for(auto i = 0u; i < server_cqs_.size() && !at_least_one_thing_executed; ++i) {
-            auto next_cq_index = (thread_number + i) % server_cqs_.size();
-            switch(execute_cq_(*server_cqs_[next_cq_index])) {
-            case CqExecutionResult::ExecutedNone: break;
-            case CqExecutionResult::ExecutedOne: at_least_one_thing_executed = true; break;
-            case CqExecutionResult::ShutdownRequested: ++shutdown_cq_count; break;
-            }
-         }
+         run_completion_queues(cqs_);
+         for(auto& server : servers_) run_completion_queues(server->get_work_queues());
 
-         if(shutdown_cq_count == cqs_.size() + server_cqs_.size()) {
+         if(shutdown_cq_count == total_cq_count) {
             break; // switch to full shutdown mode
          }
 
          { // Read from the work queue
             if(task_queue_.try_pop(thunk)) {
                thunk();
-               at_least_one_thing_executed = true;
+               ++things_executed_count;
             }
          }
 
-         if(!at_least_one_thing_executed) { // Sleep if we've failed to execute anything
+         if(things_executed_count == 0) { // Sleep if we've failed to execute anything
             std::this_thread::sleep_for(std::chrono::milliseconds{1});
          }
       } catch(...) {
