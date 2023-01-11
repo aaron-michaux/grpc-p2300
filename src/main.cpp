@@ -36,7 +36,35 @@ class SomeClass
 };
 
 int compute(int x) { return x + 1; }
-std::tuple<int, int, int> sumit(int x, int y, int z) { return {x, x + y, x + y + z}; }
+std::tuple<int, int, int, std::string> sumit(int x, int y, int z, std::string s)
+{
+   return {x, x + y, x + y + z, s};
+}
+
+namespace js
+{
+template<class Tag, class... Ts>
+using completion_signatures_ = stdexec::completion_signatures<Tag(Ts...)>;
+
+template<class _ReceiverId, class Tag, class... Ts> struct Operation
+{
+   using _Receiver = stdexec::__t<_ReceiverId>;
+
+   struct OpState
+   {
+      using __id = Operation;
+      std::tuple<Ts...> values;
+      _Receiver __rcvr_;
+
+      friend void tag_invoke(stdexec::start_t, OpState& op_state) noexcept
+      {
+         std::apply(
+             [&op_state](Ts&... ts) { Tag{}(std::move(op_state.__rcvr_), std::move(ts)...); },
+             op_state.values);
+      }
+   };
+};
+} // namespace js
 
 int main(int, char**)
 {
@@ -50,23 +78,26 @@ int main(int, char**)
    Greeting::Client client{ctx, channel}; // TODO: create with a scheduler (?)
    ctx.run();
 
+   stdexec::sender auto snd = client.say_hello("Tritarch");
+
    // Describe some work:
    auto fun  = [](int i) { return compute(i); };
    auto work = stdexec::when_all(stdexec::on(sched, stdexec::just(0) | stdexec::then(fun)),
                                  stdexec::on(sched, stdexec::just(1) | stdexec::then(fun)),
-                                 stdexec::on(sched, stdexec::just(2) | stdexec::then(fun))) //
+                                 stdexec::on(sched, stdexec::just(2) | stdexec::then(fun)),
+                                 snd)
                | stdexec::then(sumit);
 
-   auto snd = client.say_hello("Tritarch");
-
    // Launch the work and wait for the result:
-   auto [i, j, k] = std::get<0>(stdexec::sync_wait(std::move(work)).value());
+   auto [i, j, k, s] = std::get<0>(stdexec::sync_wait(std::move(work)).value());
 
    auto r2 = stdexec::sync_wait(std::move(snd));
 
+   std::string response = std::get<0>(r2.value());
+
    // Print the results:
-   fmt::print("{}, {}, {}\n", i, j, k);
-   fmt::print("response: {}\n", std::get<0>(r2.value()));
+   fmt::print("{}, {}, {}, {}\n", i, j, k, s);
+   fmt::print("response: {}\n", response);
 
    server_thread.join();
 

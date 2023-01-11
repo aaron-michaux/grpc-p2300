@@ -201,7 +201,11 @@ class ServerImpl final
             // memory address of this instance as the uniquely identifying tag for
             // the event.
             status_ = FINISH;
-            responder_.Finish(reply_, Status::OK, this);
+            responder_.Finish(
+                reply_,
+                grpc::Status::OK,
+                // grpc::Status{grpc::StatusCode::INVALID_ARGUMENT, "it was an invalid argument"},
+                this);
          } else {
             GPR_ASSERT(status_ == FINISH);
             // Once in the FINISH state, deallocate ourselves (CallData).

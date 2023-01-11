@@ -37,11 +37,15 @@ struct PureRpcSenderOpState
    RequestType request_;
    [[no_unique_address]] Receiver receiver_;
 
-   template<typename Message>
-   void set_error(Receiver&& receiver, grpc::StatusCode status_code, Message&& message) noexcept
-   {
-      stdexec::set_error(std::move(receiver), grpc::Status{status_code, message});
-   }
+   PureRpcSenderOpState(ExecutionContext& context,
+                        ResponseReaderFactory<Service, RequestType, ResponseType>&& factory_fn,
+                        Receiver&& receiver)
+       : context_{context}
+       , factory_fn_{std::move(factory_fn)}
+       , receiver_{std::move(receiver)}
+   {}
+   PureRpcSenderOpState(PureRpcSenderOpState&&)            = delete;
+   PureRpcSenderOpState& operator=(PureRpcSenderOpState&&) = delete;
 
    friend void tag_invoke(stdexec::start_t, PureRpcSenderOpState& self) noexcept { self.invoke(); }
 
@@ -59,24 +63,28 @@ struct PureRpcSenderOpState
                                       const grpc::Status& status,
                                       const ResponseType& response) mutable {
                 if(!is_ok) {
-                   set_error(std::move(receiver_),
-                             grpc::StatusCode::CANCELLED,
-                             "operation posted after shutdown");
-                } else if(status.ok()) {
-                   fmt::print("response: {}\n", response.message());
+                   stdexec::set_error(std::move(receiver_),
+                                      grpc::Status{grpc::StatusCode::UNAVAILABLE,
+                                                   "operation posted after shutdown"});
+
+                } else if(!status.ok()) {
+                   stdexec::set_error(std::move(receiver_),
+                                      grpc::Status{status.error_code(), status.error_message()});
+
+                } else {
                    try {
                       stdexec::set_value(std::move(receiver_), std::move(response));
+
                    } catch(std::exception& e) {
-                      set_error(std::move(receiver_),
-                                grpc::StatusCode::INVALID_ARGUMENT,
-                                fmt::format("exception unpacking protobuf, {}", e.what()));
+                      stdexec::set_error(
+                          std::move(receiver_),
+                          grpc::Status{grpc::StatusCode::INTERNAL,
+                                       fmt::format("exception unpacking protobuf, {}", e.what())});
                    } catch(...) {
-                      set_error(std::move(receiver_),
-                                grpc::StatusCode::INVALID_ARGUMENT,
-                                "unknown exception unpacking protobuf");
+                      stdexec::set_error(std::move(receiver_),
+                                         grpc::Status{grpc::StatusCode::INTERNAL,
+                                                      "unknown exception unpacking protobuf"});
                    }
-                } else {
-                   set_error(std::move(receiver_), status.error_code(), status.error_message());
                 }
              };
 
@@ -84,10 +92,11 @@ struct PureRpcSenderOpState
                                                                 std::move(completion));
           });
 
-      if(!invoked) { // Immediately set the value to "CANCELLED"
-         stdexec::set_error(std::move(receiver_),
-                            grpc::Status{grpc::StatusCode::CANCELLED, "rpc was not scheduled"});
-      }
+      if(!invoked)
+         stdexec::set_error(
+             std::move(receiver_),
+             grpc::Status{grpc::StatusCode::UNAVAILABLE,
+                          "rpc was not scheduled because the service was unavailable"});
    }
 };
 
@@ -140,10 +149,21 @@ struct CallData
  */
 template<typename Receiver, typename ResultType> struct RpcSenderOpState
 {
+   static constexpr bool IsVoidResultType = std::is_same<ResultType, void>::value;
+
    ExecutionContext& context_;
    WrappedRpcFactory<ResultType> call_factory_;
-   static constexpr bool is_void_result_type = std::is_same<ResultType, void>::value;
    [[no_unique_address]] Receiver receiver_;
+
+   RpcSenderOpState(ExecutionContext& context,
+                    WrappedRpcFactory<ResultType>&& call_factory,
+                    Receiver&& receiver)
+       : context_{context}
+       , call_factory_{std::move(call_factory)}
+       , receiver_{std::move(receiver)}
+   {}
+   RpcSenderOpState(RpcSenderOpState&&)            = delete;
+   RpcSenderOpState& operator=(RpcSenderOpState&&) = delete;
 
    friend void tag_invoke(stdexec::start_t, RpcSenderOpState& self) noexcept { self.invoke(); }
 
@@ -152,41 +172,35 @@ template<typename Receiver, typename ResultType> struct RpcSenderOpState
       const bool invoked = context_.post(call_factory_(
           [this](bool is_ok, const grpc::Status& status, std::optional<ResultType> result) {
              if(!is_ok) {
-                set_error(std::move(receiver_), RpcStatusCode::Unavailable);
+                stdexec::set_error(std::move(receiver_), RpcStatus{RpcStatusCode::Unavailable});
 
              } else if(!status.ok()) {
-                set_error(std::move(receiver_),
-                          detail::to_rpc_status_code(status.error_code()),
-                          status.error_message());
+                stdexec::set_error(std::move(receiver_),
+                                   RpcStatus{detail::to_rpc_status_code(status.error_code()),
+                                             status.error_message()});
 
-             } else if(!result.has_value()) {
-                if constexpr(is_void_result_type) {
-                   set_error(std::move(receiver_), RpcStatusCode::LogicError);
-                } else {
-                   stdexec::set_value(std::move(receiver_)); // Handle void
-                }
+             } else if(!result.has_value() && !IsVoidResultType) {
+                stdexec::set_error(std::move(receiver_),
+                                   sgrpc::RpcStatus{sgrpc::RpcStatusCode::LogicError});
+
              } else {
                 try {
-                   stdexec::set_value(std::move(receiver_), std::move(*result));
-
+                   if constexpr(IsVoidResultType)
+                      stdexec::set_value(std::move(receiver_));
+                   else
+                      stdexec::set_value(std::move(receiver_), std::move(*result));
                 } catch(std::exception& e) {
-                   set_error(std::move(receiver_),
-                             RpcStatusCode::LogicError,
-                             fmt::format("exception moving result, {}", e.what()));
-
+                   stdexec::set_error(
+                       std::move(receiver_),
+                       sgrpc::RpcStatus{sgrpc::RpcStatusCode::LogicError, status.error_message()});
                 } catch(...) {
-                   set_error(std::move(receiver_),
-                             RpcStatusCode::LogicError,
-                             "exception unpacking protobuf");
+                   stdexec::set_error(std::move(receiver_),
+                                      sgrpc::RpcStatus{sgrpc::RpcStatusCode::LogicError,
+                                                       "exception unpacking protobuf"});
                 }
              }
           }));
-      if(!invoked) { set_error(std::move(receiver_), RpcStatusCode::Unavailable); }
-   }
-
-   void set_error(Receiver&& receiver, RpcStatusCode status_code, std::string details = {}) noexcept
-   {
-      stdexec::set_error(std::move(receiver), RpcStatus{status_code, std::move(details)});
+      if(!invoked) stdexec::set_error(std::move(receiver_), RpcStatus{RpcStatusCode::Unavailable});
    }
 };
 } // namespace sgrpc::detail

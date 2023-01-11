@@ -36,7 +36,8 @@ class RpcStatus
    RpcStatus& operator=(const RpcStatus& o) noexcept = default;
    RpcStatus& operator=(RpcStatus&& o) noexcept      = default;
 
-   RpcStatusCode error_code() const { return static_cast<RpcStatusCode>(error_code_.value()); }
+   std::error_code ec() const { return error_code_; }
+   RpcStatusCode error_code() const { return static_cast<RpcStatusCode>(ec().value()); }
    std::string error_message() const { return error_code_.message(); }
 
    bool ok() const { return error_code() == RpcStatusCode::Ok; }

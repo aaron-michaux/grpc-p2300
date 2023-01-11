@@ -3,7 +3,8 @@
 
 #include "rpc_sender.hpp"
 
-namespace sgrpc {
+namespace sgrpc
+{
 
 /**
  * The "stub" for the client side of an InflightRpc. The `call` method is used to
@@ -23,41 +24,45 @@ namespace sgrpc {
  *   need to know the `completion_queue`, which is passed into the call-factory, from
  *   the `context`.
  */
-template <typename Service, typename RequestType, typename ResponseType> class RpcStub {
-public:
-  template <typename MemberFunctionPointer>
-  RpcStub(Service& service, MemberFunctionPointer mem_fn_ptr) : factory_fn_{service, mem_fn_ptr} {}
+template<typename Service, typename RequestType, typename ResponseType> class RpcStub
+{
+ public:
+   template<typename MemberFunctionPointer>
+   RpcStub(Service& service, MemberFunctionPointer mem_fn_ptr)
+       : factory_fn_{service, mem_fn_ptr}
+   {}
 
-  /**
-   * The sender here is like a future; The call sends/receives Protobuf envelopes
-   */
-  PureRpcSender<Service, RequestType, ResponseType> call(sgrpc::ExecutionContext& context,
-                                                         RequestType request) {
-    return {context, factory_fn_, std::move(request)};
-  }
+   /**
+    * The sender here is like a future; The call sends/receives Protobuf envelopes
+    */
+   PureRpcSender<Service, RequestType, ResponseType> call(sgrpc::ExecutionContext& context,
+                                                          RequestType request)
+   {
+      return {context, factory_fn_, std::move(request)};
+   }
 
-  /**
-   * Wrap the RPC to type-erase the entire grpc service from the user of the RpcSender
-   */
-  template <typename ResultType,         // The unwrapped result type
+   /**
+    * Wrap the RPC to type-erase the entire grpc service from the user of the RpcSender
+    */
+   template<typename ResultType,         // The unwrapped result type
             typename ConversionFunction> // Functor to convert from ResponseType => ResultType
-  RpcSender<ResultType> call(sgrpc::ExecutionContext& context, RequestType request) {
+   RpcSender<ResultType> call(sgrpc::ExecutionContext& context, RequestType request)
+   {
+      using CallData
+          = detail::CallData<Service, RequestType, ResponseType, ResultType, ConversionFunction>;
 
-    using CallData =
-        detail::CallData<Service, RequestType, ResponseType, ResultType, ConversionFunction>;
+      WrappedRpcFactory<ResultType> factory
+          = [data = std::make_shared<CallData>(context, factory_fn_, std::move(request))](
+                WrappedCompletionHandler<ResultType> completion) mutable -> RpcFactory {
+         data->completion = std::move(completion);
+         return [data = std::move(data)](grpc::CompletionQueue& cq) mutable { return (*data)(cq); };
+      };
 
-    WrappedRpcFactory<ResultType> factory =
-        [data = std::make_shared<CallData>(context, factory_fn_, std::move(request))](
-            WrappedCompletionHandler<ResultType> completion) mutable -> RpcFactory {
-      data->completion = std::move(completion);
-      return [data = std::move(data)](grpc::CompletionQueue& cq) mutable { return (*data)(cq); };
-    };
+      return {context, std::move(factory)};
+   }
 
-    return {context, std::move(factory)};
-  }
-
-private:
-  ResponseReaderFactory<Service, RequestType, ResponseType> factory_fn_;
+ private:
+   ResponseReaderFactory<Service, RequestType, ResponseType> factory_fn_;
 };
 
 } // namespace sgrpc

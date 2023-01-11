@@ -58,8 +58,8 @@ GEN_HEADERS+=$(patsubst %.proto, $(GEN_DIR)/%.grpc.pb.h, $(GRPC_PROTOS))
 ifeq ("$(BUILD_TESTS)", "True")
   BASE_SOURCES:=$(SOURCES)
   SOURCES=$(filter-out src/main.cpp,$(BASE_SOURCES)) $(shell find testcases -type f -name '*.cpp' -o -name '*.cc' -o -name '*.c')  
-  CPPFLAGS+=-DTEST_BUILD -DCATCH_BUILD -DCATCH_CONFIG_PREFIX_ALL -DCATCH_CONFIG_COLOUR_ANSI
-  LIBS+=-lCatch2Main -lCatch2
+  CPPFLAGS+=-DTEST_BUILD
+  LIBS+=-lgtest -lgtest_main
 endif
 
 ifeq ("$(BUILD_EXAMPLES)", "True")

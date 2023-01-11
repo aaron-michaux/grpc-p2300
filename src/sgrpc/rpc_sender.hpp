@@ -49,10 +49,8 @@ template<typename Service, typename RequestType, typename ResponseType> class Pu
                  ResponseReaderFactory<Service, RequestType, ResponseType> factory_fn,
                  RequestType request)
        : context_{context}
-       , //
-       factory_fn_{std::move(factory_fn)}
-       ,                            //
-       request_{std::move(request)} //
+       , factory_fn_{std::move(factory_fn)}
+       , request_{std::move(request)}
    {}
 
  private:
@@ -91,8 +89,7 @@ template<typename ResultType> class RpcSender
 
    RpcSender(ExecutionContext& context, WrappedRpcFactory<ResultType> call_factory)
        : context_{context}
-       ,                                      //
-       call_factory_{std::move(call_factory)} //
+       , call_factory_{std::move(call_factory)}
    {}
 
  private:
