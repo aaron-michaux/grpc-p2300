@@ -36,35 +36,11 @@ class SomeClass
 };
 
 int compute(int x) { return x + 1; }
-std::tuple<int, int, int, std::string> sumit(int x, int y, int z, std::string s)
+
+std::string sumit(int x, int y, int z, std::string s)
 {
-   return {x, x + y, x + y + z, s};
+   return fmt::format("({}, {}, {}), {}\n", x, y, z, s);
 }
-
-namespace js
-{
-template<class Tag, class... Ts>
-using completion_signatures_ = stdexec::completion_signatures<Tag(Ts...)>;
-
-template<class _ReceiverId, class Tag, class... Ts> struct Operation
-{
-   using _Receiver = stdexec::__t<_ReceiverId>;
-
-   struct OpState
-   {
-      using __id = Operation;
-      std::tuple<Ts...> values;
-      _Receiver __rcvr_;
-
-      friend void tag_invoke(stdexec::start_t, OpState& op_state) noexcept
-      {
-         std::apply(
-             [&op_state](Ts&... ts) { Tag{}(std::move(op_state.__rcvr_), std::move(ts)...); },
-             op_state.values);
-      }
-   };
-};
-} // namespace js
 
 int main(int, char**)
 {
@@ -86,17 +62,18 @@ int main(int, char**)
                                  stdexec::on(sched, stdexec::just(1) | stdexec::then(fun)),
                                  stdexec::on(sched, stdexec::just(2) | stdexec::then(fun)),
                                  snd)
-               | stdexec::then(sumit);
+               | stdexec::then(sumit)
+               | stdexec::let_value([&client](std::string s) { return client.say_hello(s); });
 
    // Launch the work and wait for the result:
-   auto [i, j, k, s] = std::get<0>(stdexec::sync_wait(std::move(work)).value());
+   auto [result] = stdexec::sync_wait(std::move(work)).value();
 
    auto r2 = stdexec::sync_wait(std::move(snd));
 
    std::string response = std::get<0>(r2.value());
 
    // Print the results:
-   fmt::print("{}, {}, {}, {}\n", i, j, k, s);
+   fmt::print("{}\n", result);
    fmt::print("response: {}\n", response);
 
    server_thread.join();

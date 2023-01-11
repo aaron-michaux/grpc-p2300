@@ -80,6 +80,7 @@ struct PureRpcSenderOpState
                           std::move(receiver_),
                           grpc::Status{grpc::StatusCode::INTERNAL,
                                        fmt::format("exception unpacking protobuf, {}", e.what())});
+
                    } catch(...) {
                       stdexec::set_error(std::move(receiver_),
                                          grpc::Status{grpc::StatusCode::INTERNAL,
