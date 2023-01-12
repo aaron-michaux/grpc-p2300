@@ -24,11 +24,11 @@ namespace sgrpc
  *   need to know the `completion_queue`, which is passed into the call-factory, from
  *   the `context`.
  */
-template<typename Service, typename RequestType, typename ResponseType> class RpcStub
+template<typename Service, typename RequestType, typename ResponseType> class ClientRpcStub
 {
  public:
    template<typename MemberFunctionPointer>
-   RpcStub(Service& service, MemberFunctionPointer mem_fn_ptr)
+   ClientRpcStub(Service& service, MemberFunctionPointer mem_fn_ptr)
        : factory_fn_{service, mem_fn_ptr}
    {}
 

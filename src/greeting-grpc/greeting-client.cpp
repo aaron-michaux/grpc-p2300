@@ -24,7 +24,7 @@ struct Client::Impl_
 
    sgrpc::ExecutionContext& context_;
    std::unique_ptr<Service> stub_;
-   sgrpc::RpcStub<Service, helloworld::HelloRequest, helloworld::HelloReply> stub_say_hello_;
+   sgrpc::ClientRpcStub<Service, helloworld::HelloRequest, helloworld::HelloReply> stub_say_hello_;
 };
 
 // -- Construction/Destruction
