@@ -3,15 +3,17 @@
 #define PROJECT__STDINC_INCLUDE_GUARD_HPP
 
 #include <fmt/format.h>
+
+#include <condition_variable>
 #include <iostream>
 #include <ranges>
-#include <type_traits>
 #include <thread>
-#include <condition_variable>
+#include <type_traits>
 
 #include <cstdlib>
 
-namespace std {
+namespace std
+{
 using namespace fmt;
 }
 

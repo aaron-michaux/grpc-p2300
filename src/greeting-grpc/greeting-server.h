@@ -30,7 +30,7 @@ class ServerContainer
 {
  public:
    ServerContainer();
-   ~ServerContainer();    //!< The server shuts down when instance destructs
+   ~ServerContainer();    //!< Does a blocking stop of the server on destruction
    uint16_t port() const; //!< The port the server is listening on
    void stop();           //!< This should return a sender; current implementation is blocking
 

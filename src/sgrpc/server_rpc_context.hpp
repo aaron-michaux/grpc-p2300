@@ -32,16 +32,37 @@ using BindRpcRequestFunction = std::function<void(grpc::ServerContext*,
                                                   void*)>;
 
 /**
+ * @brief Factory method to create `BindRpcRequestFunction` thunks.
+ *
+ * ~~~
+ * using Service = helloworld::Greeter::AsyncService;
+ * auto bind_thunk = bind_rpc(service, &Service::RequestSayHello);
+ * ~~~
+ */
+auto bind_rpc(auto& service, auto bind_thunk)
+{
+   using std::placeholders::_1;
+   using std::placeholders::_2;
+   using std::placeholders::_3;
+   using std::placeholders::_4;
+   using std::placeholders::_5;
+   using std::placeholders::_6;
+   return std::bind(bind_thunk, std::ref(service), _1, _2, _3, _4, _5, _6);
+}
+
+/**
  * @brief Logic to execute to service a server-side RPC
  */
-// template<typename RequestType, typename ResponseType>
-// using RpcLogicThunk
-//     = std::function<RpcSender<ResponseType>(const grpc::ServerContext& server_context,
-//                                             const RequestType& request_envelope)>;
-
 template<typename RequestType, typename ResponseType>
 using RpcLogicThunk = std::function<ResponseType(const grpc::ServerContext& server_context,
                                                  const RequestType& request_envelope)>;
+
+auto bind_logic(auto& server, auto logic_thunk)
+{
+   using std::placeholders::_1;
+   using std::placeholders::_2;
+   return std::bind(logic_thunk, std::ref(server), _1, _2);
+}
 
 /**
  * @brief Context for handling servier-side RPC requests
@@ -59,9 +80,8 @@ using RpcLogicThunk = std::function<ResponseType(const grpc::ServerContext& serv
  */
 template<typename RequestType,
          typename ResponseType,
-         typename Service,
-         typename BindRequest, // = BindRpcRequestFunction<RequestType, ResponseType>,
-         typename RpcLogic = RpcLogicThunk<RequestType, ResponseType>>
+         typename BindRequest = BindRpcRequestFunction<RequestType, ResponseType>,
+         typename RpcLogic    = RpcLogicThunk<RequestType, ResponseType>>
 class ServerRpcContext : public CompletionQueueEvent
 {
  private:
@@ -75,12 +95,10 @@ class ServerRpcContext : public CompletionQueueEvent
    // CompletionQueue: Used by grpc to process events
 
    ServerRpcContext(Scheduler scheduler,
-                    Service& service, // that the request is bound to
                     BindRequest bind_request,
                     RpcLogic logic,
                     grpc::ServerCompletionQueue& cq)
-       : scheduler_{scheduler}
-       , service_{service}
+       : scheduler_{scheduler} // , service_{service}
        , bind_request_{bind_request}
        , logic_{logic}
        , cq_{cq}
@@ -88,7 +106,7 @@ class ServerRpcContext : public CompletionQueueEvent
    {
       // Bind the request to the passed completion queue
       // Note: `this`'s lifecycle now controlled by the completion queue
-      bind_request_(service_, &server_context_, &request_, &response_writer_, &cq_, &cq_, this);
+      bind_request_(&server_context_, &request_, &response_writer_, &cq_, &cq_, this);
    }
 
    ~ServerRpcContext() = default;
@@ -99,7 +117,7 @@ class ServerRpcContext : public CompletionQueueEvent
          delete this;
       } else {
          // Spawn a new RpcCallContext to service incoming requests
-         new ServerRpcContext{scheduler_, service_, bind_request_, logic_, cq_};
+         new ServerRpcContext{scheduler_, bind_request_, logic_, cq_};
 
          // Will delete on next call to `proceed`
          delete_on_next_complete_ = true;
@@ -132,7 +150,6 @@ class ServerRpcContext : public CompletionQueueEvent
  private:
    Scheduler scheduler_;
 
-   Service& service_; // that the request is bound to
    BindRequest bind_request_;
    RpcLogic logic_;
 

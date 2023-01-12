@@ -62,6 +62,8 @@ template<typename Service, typename RequestType, typename ResponseType> class Pu
 
 /**
  * A type-erased RpcSender: only knows about the (wrapped) ResultType; no Service/Protobuf
+ *
+ * TODO: Really we shouln't care if it's a client or server sender... so lets address that.
  */
 template<typename ResultType> class ClientRpcSender
 {

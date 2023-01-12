@@ -34,12 +34,13 @@
 namespace Greeting
 {
 
+using Service = helloworld::Greeter::AsyncService;
+
 // # -- Wiring the rpc
 
 namespace detail
 {
    using namespace helloworld;
-   using Service = Greeter::AsyncService;
 
    static void wire_rpcs(Server& server,
                          Service& service,
@@ -48,16 +49,16 @@ namespace detail
    {
       using std::placeholders::_1;
       using std::placeholders::_2;
+      using std::placeholders::_3;
+      using std::placeholders::_4;
+      using std::placeholders::_5;
+      using std::placeholders::_6;
 
       // Let each completion queue server every RPC
-      new sgrpc::ServerRpcContext<HelloRequest,
-                                  HelloReply,
-                                  Service,
-                                  decltype(std::mem_fn(&Service::RequestSayHello))>(
+      new sgrpc::ServerRpcContext<HelloRequest, HelloReply>(
           scheduler,
-          service,
-          std::mem_fn(&Service::RequestSayHello),
-          std::bind(&Server::say_hello, std::ref(server), _1, _2),
+          sgrpc::bind_rpc(service, &Service::RequestSayHello),
+          sgrpc::bind_logic(server, &Server::say_hello),
           cq);
    }
 } // namespace detail
@@ -73,7 +74,7 @@ struct ServerContainer::Impl
       // TODO: should return a `sender`
       container_->grpc_server().Wait();
    }
-   std::shared_ptr<sgrpc::GenericServerContainer<detail::Service, Server>> container_;
+   std::shared_ptr<sgrpc::GenericServerContainer<Service, Server>> container_;
 };
 
 ServerContainer::ServerContainer()
@@ -94,12 +95,12 @@ ServerContainer::build(sgrpc::ExecutionContext& execution_context,
 {
    ServerContainer handle;
    handle.impl_->container_
-       = sgrpc::GenericServerContainer<detail::Service, Server>::make(execution_context,
-                                                                      server,
-                                                                      detail::wire_rpcs,
-                                                                      number_server_work_queues,
-                                                                      port,
-                                                                      std::move(credentials));
+       = sgrpc::GenericServerContainer<Service, Server>::make(execution_context,
+                                                              server,
+                                                              detail::wire_rpcs,
+                                                              number_server_work_queues,
+                                                              port,
+                                                              std::move(credentials));
    return handle;
 }
 
