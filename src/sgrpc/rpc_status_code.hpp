@@ -21,7 +21,6 @@ enum class RpcStatusCode : int {
    Unavailable,
    DataLoss,
    Unauthenticated,
-   LogicError,
    Unspecified
 };
 }

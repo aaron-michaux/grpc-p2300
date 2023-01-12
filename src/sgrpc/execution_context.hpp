@@ -46,7 +46,7 @@ class ExecutionContext final
     * This method must be called before `run()`. The attached server's lifetime is
     * extended until after `stop()`.
     */
-   void attach_server(std::shared_ptr<ServerInterface> server);
+   void attach_server(std::shared_ptr<ServerContainerInterface> server);
    //@}
 
    //@{ Posting events
@@ -77,7 +77,7 @@ class ExecutionContext final
    std::vector<std::thread> threads_;
    AtomicTaskStealingQueue<ThunkType> task_queue_; //!< For things not pushed onto cqs_
    std::vector<std::unique_ptr<grpc::CompletionQueue>> cqs_;
-   std::vector<std::shared_ptr<ServerInterface>> servers_;
+   std::vector<std::shared_ptr<ServerContainerInterface>> servers_;
 
    std::vector<ThunkType> notifications_; //!< For when stopped and drained
    std::atomic<ExecutionState> state_{ExecutionState::Ready};

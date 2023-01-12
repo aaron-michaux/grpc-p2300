@@ -16,13 +16,14 @@ namespace sgrpc
 /**
  * A Sender for grpc RPCs that uses the raw input/output protobuf types.
  */
-template<typename Service, typename RequestType, typename ResponseType> class PureRpcSender
+template<typename Service, typename RequestType, typename ResponseType> class PureClientRpcSender
 {
  private:
    /**
     * OperationState connect(RpcSender self, Receiver receiver)
     */
-   template<class R> friend auto tag_invoke(stdexec::connect_t, PureRpcSender self, R&& receiver)
+   template<class R>
+   friend auto tag_invoke(stdexec::connect_t, PureClientRpcSender self, R&& receiver)
    {
       return detail::
           PureRpcSenderOpState<Service, RequestType, ResponseType, std::remove_cvref_t<R>>{
@@ -36,7 +37,7 @@ template<typename Service, typename RequestType, typename ResponseType> class Pu
     * Scheduler get_completion_scheduler(RpcSender self)
     */
    friend Scheduler tag_invoke(stdexec::get_completion_scheduler_t<stdexec::set_value_t>,
-                               PureRpcSender self) noexcept
+                               PureClientRpcSender self) noexcept
    {
       return Scheduler{self.context_};
    }
@@ -45,9 +46,9 @@ template<typename Service, typename RequestType, typename ResponseType> class Pu
    using completion_signatures = stdexec::completion_signatures<stdexec::set_value_t(ResponseType),
                                                                 stdexec::set_error_t(grpc::Status)>;
 
-   PureRpcSender(ExecutionContext& context,
-                 ResponseReaderFactory<Service, RequestType, ResponseType> factory_fn,
-                 RequestType request)
+   PureClientRpcSender(ExecutionContext& context,
+                       ResponseReaderFactory<Service, RequestType, ResponseType> factory_fn,
+                       RequestType request)
        : context_{context}
        , factory_fn_{std::move(factory_fn)}
        , request_{std::move(request)}
@@ -62,13 +63,13 @@ template<typename Service, typename RequestType, typename ResponseType> class Pu
 /**
  * A type-erased RpcSender: only knows about the (wrapped) ResultType; no Service/Protobuf
  */
-template<typename ResultType> class RpcSender
+template<typename ResultType> class ClientRpcSender
 {
  private:
    /**
     * OperationState connect(RpcSender self, Receiver receiver)
     */
-   template<class R> friend auto tag_invoke(stdexec::connect_t, RpcSender self, R&& receiver)
+   template<class R> friend auto tag_invoke(stdexec::connect_t, ClientRpcSender self, R&& receiver)
    {
       return detail::RpcSenderOpState<std::remove_cvref_t<R>, ResultType>{
           self.context_, std::move(self.call_factory_), std::move(receiver)};
@@ -78,7 +79,7 @@ template<typename ResultType> class RpcSender
     * Scheduler get_completion_scheduler(RpcSender self)
     */
    friend Scheduler tag_invoke(stdexec::get_completion_scheduler_t<stdexec::set_value_t>,
-                               RpcSender self) noexcept
+                               ClientRpcSender self) noexcept
    {
       return Scheduler{self.context_};
    }
@@ -87,7 +88,7 @@ template<typename ResultType> class RpcSender
    using completion_signatures = stdexec::completion_signatures<stdexec::set_value_t(ResultType),
                                                                 stdexec::set_error_t(RpcStatus)>;
 
-   RpcSender(ExecutionContext& context, WrappedRpcFactory<ResultType> call_factory)
+   ClientRpcSender(ExecutionContext& context, WrappedRpcFactory<ResultType> call_factory)
        : context_{context}
        , call_factory_{std::move(call_factory)}
    {}

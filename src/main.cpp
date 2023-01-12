@@ -39,21 +39,21 @@ int compute(int x) { return x + 1; }
 
 std::string sumit(int x, int y, int z, std::string s)
 {
-   throw std::runtime_error("ff");
    return fmt::format("({}, {}, {}), {}\n", x, y, z, s);
 }
 
 int main(int, char**)
 {
-   std::thread server_thread{Greeting::run_server};
-
    sgrpc::ExecutionContext ctx{2, 1};
    stdexec::scheduler auto sched = sgrpc::Scheduler{ctx};
-
-   auto channel = grpc::CreateChannel("localhost:50051", grpc::InsecureChannelCredentials());
-
-   Greeting::Client client{ctx, channel}; // TODO: create with a scheduler (?)
+   auto server                   = std::make_shared<Greeting::Server>();
+   auto server_handle            = Greeting::ServerHandle::build(ctx, server);
    ctx.run();
+   fmt::print("server listening on port:{}\n", server_handle.port());
+
+   auto channel = grpc::CreateChannel(fmt::format("localhost:{}", server_handle.port()),
+                                      grpc::InsecureChannelCredentials());
+   Greeting::Client client{ctx, channel}; // TODO: create with a scheduler (?)
 
    stdexec::sender auto snd = client.say_hello("Tritarch");
 
@@ -65,11 +65,11 @@ int main(int, char**)
                            stdexec::on(sched, stdexec::just(2) | stdexec::then(fun)),
                            snd)
          | stdexec::then(sumit)
-         | stdexec::let_value([&client](std::string s) { return client.say_hello(s); })
+         | stdexec::let_value([&](std::string s) { return client.say_hello(s); })
          | stdexec::upon_error([](auto... arg) {
               // fmt::print("status {}, {}", status.error_message(), status.details());
               // fmt::print(args...);
-              return std::string{"dap"};
+              return std::string{"there was an error of some kind"};
            });
 
    // Launch the work and wait for the result:
@@ -80,10 +80,8 @@ int main(int, char**)
    std::string response = std::get<0>(r2.value());
 
    // Print the results:
-   fmt::print("{}\n", result);
+   fmt::print("result:   {}\n", result);
    fmt::print("response: {}\n", response);
-
-   server_thread.join();
 
    return EXIT_SUCCESS;
 }

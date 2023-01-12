@@ -37,7 +37,7 @@ Client::~Client() = default;
 
 // -- RPC interface
 
-sgrpc::RpcSender<std::string> Client::say_hello(std::string user)
+sgrpc::ClientRpcSender<std::string> Client::say_hello(std::string user)
 {
    helloworld::HelloRequest request;
    request.set_name(std::move(user));

@@ -24,7 +24,7 @@ class Client final
    /**
     * Returns a sender<string> (like a future) result
     */
-   sgrpc::RpcSender<std::string> say_hello(std::string user);
+   sgrpc::ClientRpcSender<std::string> say_hello(std::string user);
 
  private:
    /**

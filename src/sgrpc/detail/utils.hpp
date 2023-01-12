@@ -46,4 +46,29 @@ inline RpcStatusCode to_rpc_status_code(grpc::StatusCode code)
    return RpcStatusCode::Unspecified;
 }
 
+inline grpc::StatusCode to_grpc_status_code(RpcStatusCode code)
+{
+   switch(code) {
+   case RpcStatusCode::Ok: return grpc::StatusCode::OK;
+   case RpcStatusCode::Cancelled: return grpc::StatusCode::CANCELLED;
+   case RpcStatusCode::Unknown: return grpc::StatusCode::UNKNOWN;
+   case RpcStatusCode::InvalidArgument: return grpc::StatusCode::INVALID_ARGUMENT;
+   case RpcStatusCode::DeadlineExceeded: return grpc::StatusCode::DEADLINE_EXCEEDED;
+   case RpcStatusCode::NotFound: return grpc::StatusCode::NOT_FOUND;
+   case RpcStatusCode::AlreadyExists: return grpc::StatusCode::ALREADY_EXISTS;
+   case RpcStatusCode::PermissionDenied: return grpc::StatusCode::PERMISSION_DENIED;
+   case RpcStatusCode::Unauthenticated: return grpc::StatusCode::UNAUTHENTICATED;
+   case RpcStatusCode::ResourceExhausted: return grpc::StatusCode::RESOURCE_EXHAUSTED;
+   case RpcStatusCode::FailedPrecondition: return grpc::StatusCode::FAILED_PRECONDITION;
+   case RpcStatusCode::Aborted: return grpc::StatusCode::ABORTED;
+   case RpcStatusCode::OutOfRange: return grpc::StatusCode::OUT_OF_RANGE;
+   case RpcStatusCode::Unimplemented: return grpc::StatusCode::UNIMPLEMENTED;
+   case RpcStatusCode::Internal: return grpc::StatusCode::INTERNAL;
+   case RpcStatusCode::Unavailable: return grpc::StatusCode::UNAVAILABLE;
+   case RpcStatusCode::DataLoss: return grpc::StatusCode::DATA_LOSS;
+   case RpcStatusCode::Unspecified: return grpc::StatusCode::DO_NOT_USE;
+   }
+   return grpc::StatusCode::UNKNOWN;
+}
+
 } // namespace sgrpc::detail

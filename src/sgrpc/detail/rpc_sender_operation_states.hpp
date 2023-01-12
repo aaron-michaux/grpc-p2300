@@ -182,7 +182,7 @@ template<typename Receiver, typename ResultType> struct RpcSenderOpState
 
              } else if(!result.has_value() && !IsVoidResultType) {
                 stdexec::set_error(std::move(receiver_),
-                                   sgrpc::RpcStatus{sgrpc::RpcStatusCode::LogicError});
+                                   sgrpc::RpcStatus{sgrpc::RpcStatusCode::Internal});
 
              } else {
                 try {
@@ -193,10 +193,10 @@ template<typename Receiver, typename ResultType> struct RpcSenderOpState
                 } catch(std::exception& e) {
                    stdexec::set_error(
                        std::move(receiver_),
-                       sgrpc::RpcStatus{sgrpc::RpcStatusCode::LogicError, status.error_message()});
+                       sgrpc::RpcStatus{sgrpc::RpcStatusCode::Internal, status.error_message()});
                 } catch(...) {
                    stdexec::set_error(std::move(receiver_),
-                                      sgrpc::RpcStatus{sgrpc::RpcStatusCode::LogicError,
+                                      sgrpc::RpcStatus{sgrpc::RpcStatusCode::Internal,
                                                        "exception unpacking protobuf"});
                 }
              }

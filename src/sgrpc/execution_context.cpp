@@ -35,7 +35,7 @@ ExecutionContext::~ExecutionContext() { stop(); }
 
 // -- Setters
 
-void ExecutionContext::attach_server(std::shared_ptr<ServerInterface> server)
+void ExecutionContext::attach_server(std::shared_ptr<ServerContainerInterface> server)
 {
    std::lock_guard lock{padlock_};
    if(get_state() != ExecutionState::Ready) {

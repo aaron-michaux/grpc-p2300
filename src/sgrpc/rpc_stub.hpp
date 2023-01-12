@@ -35,8 +35,8 @@ template<typename Service, typename RequestType, typename ResponseType> class Rp
    /**
     * The sender here is like a future; The call sends/receives Protobuf envelopes
     */
-   PureRpcSender<Service, RequestType, ResponseType> call(sgrpc::ExecutionContext& context,
-                                                          RequestType request)
+   PureClientRpcSender<Service, RequestType, ResponseType> call(sgrpc::ExecutionContext& context,
+                                                                RequestType request)
    {
       return {context, factory_fn_, std::move(request)};
    }
@@ -46,7 +46,7 @@ template<typename Service, typename RequestType, typename ResponseType> class Rp
     */
    template<typename ResultType,         // The unwrapped result type
             typename ConversionFunction> // Functor to convert from ResponseType => ResultType
-   RpcSender<ResultType> call(sgrpc::ExecutionContext& context, RequestType request)
+   ClientRpcSender<ResultType> call(sgrpc::ExecutionContext& context, RequestType request)
    {
       using CallData
           = detail::CallData<Service, RequestType, ResponseType, ResultType, ConversionFunction>;

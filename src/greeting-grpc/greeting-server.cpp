@@ -18,6 +18,8 @@
 
 #include "greeting-server.h"
 
+#include "sgrpc/sgrpc.hpp"
+
 #include <protos/helloworld.grpc.pb.h>
 
 #include <grpc/support/log.h>
@@ -30,254 +32,202 @@
 
 namespace Greeting
 {
-// # -- Private Implemenation
 
-class Server::Impl : public sgrpc::ServerInterface, public std::enable_shared_from_this<Impl>
+namespace detail
 {
- public:
-   Impl(sgrpc::ExecutionContext& execution_context)
-       : execution_context_{execution_context}
-   {}
+   using namespace helloworld;
+   using Service = Greeter::AsyncService;
 
-   static std::shared_ptr<Impl> make(sgrpc::ExecutionContext& execution_context,
-                                     uint32_t number_work_queues,
-                                     uint16_t port,
-                                     std::shared_ptr<grpc::ServerCredentials> credentials)
+   static void wire_rpcs(Server& server,
+                         Service& service,
+                         sgrpc::Scheduler scheduler,
+                         grpc::ServerCompletionQueue& cq)
    {
-      auto impl = std::make_shared<Impl>(execution_context);
-      if(!impl->init(number_work_queues, port, std::move(credentials))) { return nullptr; }
-      return impl;
+      auto logic = [&server](const grpc::ServerContext& server_context,
+                             const HelloRequest& request) mutable -> HelloReply {
+         return server.say_hello(server_context, request);
+      };
+
+      // Let each completion queue server every RPC
+      new sgrpc::ServerRpcContext<HelloRequest,
+                                  HelloReply,
+                                  Service,
+                                  decltype(std::mem_fn(&Service::RequestSayHello)),
+                                  decltype(logic)>(
+          scheduler, service, std::mem_fn(&Service::RequestSayHello), logic, cq);
    }
+} // namespace detail
 
-   uint16_t get_port() const { return port_; }
-
-   std::vector<std::unique_ptr<grpc::ServerCompletionQueue>>& get_work_queues() override
-   {
-      return cqs_;
-   }
-
- private:
-   bool init(uint32_t number_work_queues,
-             uint16_t port,
-             std::shared_ptr<grpc::ServerCredentials> credentials)
-   {
-      // if port is zero, then what?
-      if(number_work_queues == 0) throw std::invalid_argument{"requires at least 1 work queue"};
-
-      // Set the listening port for this server
-      std::string server_address(fmt::format("0.0.0.0:{}", port));
-      int selected_port = static_cast<int>(port);
-      builder.AddListeningPort(server_address, std::move(credentials), &selected_port);
-
-      // The instance through which RPCs are handled
-      builder.RegisterService(&service_);
-
-      // Create the work queues
-      cqs_.reserve(number_work_queues);
-      for(auto i = 0u; i < number_work_queues; ++i) cqs_.push_back(builder.AddCompletionQueue());
-
-      // Assemble the server.
-      server_ = builder.BuildAndStart();
-
-      // What port did we get?
-      if(port_ == 0) port_ = static_cast<uint16_t>(selected_port);
-      assert(port_ == static_cast<uint16_t>(selected_port));
-
-      // Register RPC callbacks onto the server completion queues
-      register_rpc_callbacks_();
-
-      // Attach work-queues to the execution context... these queues live as long as the context
-      execution_context_.attach_server(shared_from_this());
-
-      // Retun the port in use
-      return true;
-   }
-
-   void register_rpc_callbacks_()
-   {
-      //
-   }
-
-   grpc::ServerBuilder builder; // Can this move into init()? I Think so
-   grpc::ServerContext ctx_;    // I think this can go
-
-   sgrpc::ExecutionContext& execution_context_;
-   helloworld::Greeter::AsyncService service_;
-   std::unique_ptr<grpc::Server> server_;
-   std::vector<std::unique_ptr<grpc::ServerCompletionQueue>> cqs_;
-   uint16_t port_{0};
-};
-
-// # -- Construction/Destruction
-
-Server::Server() {}
-Server::~Server() {}
-
-Server Server::make(sgrpc::ExecutionContext& execution_context,
+ServerHandle
+ServerHandle::build(sgrpc::ExecutionContext& execution_context,
+                    std::shared_ptr<Server> server,
                     uint32_t number_server_work_queues,
                     uint16_t port,
                     std::shared_ptr<grpc::ServerCredentials> credentials) noexcept(false)
 {
-   Server server;
-   server.impl_
-       = Impl::make(execution_context, number_server_work_queues, port, std::move(credentials));
-   return server;
+   auto container = sgrpc::ServerContainer<detail::Service, Server>::make(execution_context,
+                                                                          server,
+                                                                          detail::wire_rpcs,
+                                                                          number_server_work_queues,
+                                                                          port,
+                                                                          std::move(credentials));
+
+   ServerHandle handle;
+   handle.server_ = server;
+   handle.port_   = container->port();
+
+   return handle;
 }
 
-// # -- Getters
+// template<typename ResponseType> using RpcSender = sgrpc::ClientRpcSender<ResponseType>;
 
-uint16_t Server::get_port() const { return impl_->get_port(); }
+// class ActualServerInterface /* temporary name */
+// {
+//  public:
+//    virtual ~ActualServerInterface() = default;
 
-// using grpc::Server;
-using grpc::ServerAsyncResponseWriter;
-using grpc::ServerBuilder;
-using grpc::ServerCompletionQueue;
-using grpc::ServerContext;
-using grpc::Status;
-using helloworld::Greeter;
-using helloworld::HelloReply;
-using helloworld::HelloRequest;
+//    virtual void wire_rpcs(helloworld::Greeter::AsyncService& service,
+//                           sgrpc::Scheduler scheduler,
+//                           std::vector<std::unique_ptr<grpc::ServerCompletionQueue>>& cqs)
+//        = 0;
+// };
 
-class ServerImpl final
-{
- public:
-   ~ServerImpl()
-   {
-      server_->Shutdown();
-      // Always shutdown the completion queue after the server.
-      cq_->Shutdown();
-   }
+// class ActualServer /* temporary name */ : public ActualServerInterface
+// {
+//  public:
+//    using Service = helloworld::Greeter::AsyncService;
 
-   // There is no shutdown handling in this code.
-   void Run()
-   {
-      std::string server_address("0.0.0.0:50051");
+//    void wire_rpcs(Service& service,
+//                   sgrpc::Scheduler scheduler,
+//                   std::vector<std::unique_ptr<grpc::ServerCompletionQueue>>& cqs) override
+//    {
+//       execution_context_ = &scheduler.context();
 
-      ServerBuilder builder;
-      // Listen on the given address without any authentication mechanism.
-      builder.AddListeningPort(server_address, grpc::InsecureServerCredentials());
-      // Register "service_" as the instance through which we'll communicate with
-      // clients. In this case it corresponds to an *asynchronous* service.
-      builder.RegisterService(&service_);
-      // Get hold of the completion queue used for the asynchronous communication
-      // with the gRPC runtime.
-      cq_ = builder.AddCompletionQueue();
-      // Finally assemble the server.
-      server_ = builder.BuildAndStart();
-      std::cout << "Server listening on " << server_address << std::endl;
+//       auto logic
+//           = [this](const grpc::ServerContext& server_context,
+//                    const helloworld::HelloRequest& request) mutable -> helloworld::HelloReply {
+//          return say_hello(server_context, request);
+//       };
 
-      // Proceed to the server's main loop.
-      HandleRpcs();
-   }
+//       // Let each completion queue server every RPC
+//       for(auto& cq : cqs) {
+//          new sgrpc::ServerRpcContext<helloworld::HelloRequest,
+//                                      helloworld::HelloReply,
+//                                      Service,
+//                                      decltype(std::mem_fn(&Service::RequestSayHello)),
+//                                      decltype(logic)>(
+//              scheduler, service, std::mem_fn(&Service::RequestSayHello), logic, *cq);
+//       }
+//    }
 
- private:
-   // Class encompasing the state and logic needed to serve a request.
-   class CallData
-   {
-    public:
-      // Take in the "service" instance (in this case representing an asynchronous
-      // server) and the completion queue "cq" used for asynchronous communication
-      // with the gRPC runtime.
-      CallData(Greeter::AsyncService* service, ServerCompletionQueue* cq)
-          : service_(service)
-          , cq_(cq)
-          , responder_(&ctx_)
-          , status_(CREATE)
-      {
-         // Invoke the serving logic right away.
-         Proceed();
-      }
+//    helloworld::HelloReply say_hello(const grpc::ServerContext& server_context,
+//                                     const helloworld::HelloRequest& request)
+//    {
+//       helloworld::HelloReply reply;
+//       reply.set_message(fmt::format("Say, request='{}'", request.name()));
+//       return reply;
+//    }
 
-      void Proceed()
-      {
-         if(status_ == CREATE) {
-            // Make this instance progress to the PROCESS state.
-            status_ = PROCESS;
+//  private:
+//    sgrpc::ExecutionContext* execution_context_{nullptr};
+// };
 
-            // As part of the initial CREATE state, we *request* that the system
-            // start processing SayHello requests. In this request, "this" acts are
-            // the tag uniquely identifying the request (so that different CallData
-            // instances can serve different requests concurrently), in this case
-            // the memory address of this CallData instance.
-            service_->RequestSayHello(&ctx_, &request_, &responder_, cq_, cq_, this);
-         } else if(status_ == PROCESS) {
-            // Spawn a new CallData instance to serve new clients while we process
-            // the one for this CallData. The instance will deallocate itself as
-            // part of its FINISH state.
-            new CallData(service_, cq_);
+// // # -- Private Implemenation -- most of this code belongs in the library
 
-            // The actual processing.
-            std::string prefix("Hello ");
-            reply_.set_message(prefix + request_.name());
+// class Server::Impl : public sgrpc::ServerContainerInterface,
+//                      public std::enable_shared_from_this<Impl>
+// {
+//  public:
+//    Impl(sgrpc::ExecutionContext& execution_context)
+//        : execution_context_{execution_context}
+//    {}
 
-            // And we are done! Let the gRPC runtime know we've finished, using the
-            // memory address of this instance as the uniquely identifying tag for
-            // the event.
-            status_ = FINISH;
-            responder_.Finish(
-                reply_,
-                grpc::Status::OK,
-                // grpc::Status{grpc::StatusCode::INVALID_ARGUMENT, "it was an invalid argument"},
-                this);
-         } else {
-            GPR_ASSERT(status_ == FINISH);
-            // Once in the FINISH state, deallocate ourselves (CallData).
-            delete this;
-         }
-      }
+//    static std::shared_ptr<Impl> make(sgrpc::ExecutionContext& execution_context,
+//                                      uint32_t number_work_queues,
+//                                      uint16_t port,
+//                                      std::shared_ptr<grpc::ServerCredentials> credentials)
+//    {
+//       auto impl = std::make_shared<Impl>(execution_context);
+//       if(!impl->init(number_work_queues, port, std::move(credentials))) { return nullptr; }
+//       return impl;
+//    }
 
-    private:
-      // The means of communication with the gRPC runtime for an asynchronous
-      // server.
-      Greeter::AsyncService* service_;
-      // The producer-consumer queue where for asynchronous server notifications.
-      ServerCompletionQueue* cq_;
-      // Context for the rpc, allowing to tweak aspects of it such as the use
-      // of compression, authentication, as well as to send metadata back to the
-      // client.
-      ServerContext ctx_;
+//    uint16_t get_port() const { return port_; }
 
-      // What we get from the client.
-      HelloRequest request_;
-      // What we send back to the client.
-      HelloReply reply_;
+//    std::vector<std::unique_ptr<grpc::ServerCompletionQueue>>& get_work_queues() override
+//    {
+//       return cqs_;
+//    }
 
-      // The means to get back to the client.
-      ServerAsyncResponseWriter<HelloReply> responder_;
+//  private:
+//    bool init(uint32_t number_work_queues,
+//              uint16_t port,
+//              std::shared_ptr<grpc::ServerCredentials> credentials)
+//    {
+//       // if port is zero, then what?
+//       if(number_work_queues == 0) throw std::invalid_argument{"requires at least 1 work queue"};
 
-      // Let's implement a tiny state machine with the following states.
-      enum CallStatus { CREATE, PROCESS, FINISH };
-      CallStatus status_; // The current serving state.
-   };
+//       // Set the listening port for this server
+//       std::string server_address(fmt::format("0.0.0.0:{}", port));
+//       int selected_port = static_cast<int>(port);
+//       builder.AddListeningPort(server_address, std::move(credentials), &selected_port);
 
-   // This can be run in multiple threads if needed.
-   void HandleRpcs()
-   {
-      // Spawn a new CallData instance to serve new clients.
-      new CallData(&service_, cq_.get());
-      void* tag; // uniquely identifies a request.
-      bool ok;
-      while(true) {
-         // Block waiting to read the next event from the completion queue. The
-         // event is uniquely identified by its tag, which in this case is the
-         // memory address of a CallData instance.
-         // The return value of Next should always be checked. This return value
-         // tells us whether there is any kind of event or cq_ is shutting down.
-         GPR_ASSERT(cq_->Next(&tag, &ok));
-         GPR_ASSERT(ok);
-         static_cast<CallData*>(tag)->Proceed();
-      }
-   }
+//       // The instance through which RPCs are handled
+//       builder.RegisterService(&service_);
 
-   std::unique_ptr<ServerCompletionQueue> cq_;
-   Greeter::AsyncService service_;
-   std::unique_ptr<grpc::Server> server_;
-};
+//       // Create the work queues
+//       cqs_.reserve(number_work_queues);
+//       for(auto i = 0u; i < number_work_queues; ++i) cqs_.push_back(builder.AddCompletionQueue());
 
-void run_server()
-{
-   ServerImpl server;
-   server.Run();
-}
+//       // Assemble the server.
+//       grpc_server_ = builder.BuildAndStart();
+
+//       // What port did we get?
+//       if(port_ == 0) port_ = static_cast<uint16_t>(selected_port);
+//       assert(port_ == static_cast<uint16_t>(selected_port));
+
+//       // Register RPC callbacks onto the server completion queues
+//       server_ = std::make_unique<ActualServer>();
+//       server_->wire_rpcs(service_, sgrpc::Scheduler{execution_context_}, cqs_);
+
+//       // Attach work-queues to the execution context... these queues live as long as the context
+//       execution_context_.attach_server(shared_from_this());
+
+//       // Retun the port in use
+//       return true;
+//    }
+
+//    grpc::ServerBuilder builder; // Can this move into init()? I Think so
+//    grpc::ServerContext ctx_;    // I think this can go
+
+//    using Service = helloworld::Greeter::AsyncService;
+
+//    sgrpc::ExecutionContext& execution_context_;
+//    Service service_;
+//    std::unique_ptr<grpc::Server> grpc_server_;
+//    std::unique_ptr<ActualServer> server_;
+//    std::vector<std::unique_ptr<grpc::ServerCompletionQueue>> cqs_;
+//    uint16_t port_{0};
+// };
+
+// // # -- Construction/Destruction
+
+// Server::Server() {}
+// Server::~Server() {}
+
+// Server Server::make(sgrpc::ExecutionContext& execution_context,
+//                     uint32_t number_server_work_queues,
+//                     uint16_t port,
+//                     std::shared_ptr<grpc::ServerCredentials> credentials) noexcept(false)
+// {
+//    Server server;
+//    server.impl_
+//        = Impl::make(execution_context, number_server_work_queues, port, std::move(credentials));
+//    return server;
+// }
+
+// // # -- Getters
+
+// uint16_t Server::get_port() const { return impl_->get_port(); }
 
 } // namespace Greeting

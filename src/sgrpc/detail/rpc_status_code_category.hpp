@@ -43,7 +43,6 @@ struct RpcStatusCodeCategory : std::error_category
       case RpcStatusCode::Unavailable: return "The service is currently unavailable";
       case RpcStatusCode::DataLoss: return "Unrecoverable data loss or corruption";
       case RpcStatusCode::Unauthenticated: return "Unauthenticated access";
-      case RpcStatusCode::LogicError: return "A logic error has occurred";
       case RpcStatusCode::Unspecified: return "Some unspecified error";
       }
       return "(unknown error)";

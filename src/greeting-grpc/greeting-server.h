@@ -3,17 +3,34 @@
 
 #include "sgrpc/sgrpc.hpp"
 
+#include <protos/helloworld.grpc.pb.h>
+
 namespace Greeting
 {
 
+/**
+ * The logic of the server
+ */
 class Server final
 {
- private:
-   Server();
-
  public:
-   //@{ Construction/Destruction
-   ~Server();
+   helloworld::HelloReply say_hello(const grpc::ServerContext& server_context,
+                                    const helloworld::HelloRequest& request)
+   {
+      helloworld::HelloReply reply;
+      reply.set_message(fmt::format("Say, request='{}'", request.name()));
+      return reply;
+   }
+};
+
+/**
+ * A handle to a running server listening on a specific port
+ */
+class ServerHandle
+{
+ public:
+   ~ServerHandle() = default;              //!< The server shuts down when instance destructs
+   uint16_t port() const { return port_; } //!< The port the server is listening on
 
    /**
     * Creates a new server (instance)
@@ -23,20 +40,16 @@ class Server final
     * @param credentials The grpc credentials, if any.
     * @return The port listening on.
     */
-   Server make(sgrpc::ExecutionContext& execution_context,
-               uint32_t number_server_work_queues = 1,
-               uint16_t port                      = 0,
-               std::shared_ptr<grpc::ServerCredentials> credentials
-               = grpc::InsecureServerCredentials()) noexcept(false);
-   //@}
-
-   uint16_t get_port() const; //!< The port this server is listening on
+   static ServerHandle build(sgrpc::ExecutionContext& execution_context,
+                             std::shared_ptr<Server> server,
+                             uint32_t number_server_work_queues = 1,
+                             uint16_t port                      = 0,
+                             std::shared_ptr<grpc::ServerCredentials> credentials
+                             = grpc::InsecureServerCredentials()) noexcept(false);
 
  private:
-   class Impl;
-   std::shared_ptr<Impl> impl_; // A copy of `impl` is given to execution_context
+   std::shared_ptr<Server> server_;
+   uint16_t port_{0};
 };
-
-void run_server();
 
 } // namespace Greeting
