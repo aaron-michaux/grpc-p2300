@@ -1,12 +1,12 @@
 
 #pragma once
 
+#include "detail/base_inc.hpp"
+
 #include "sgrpc/rpc_sender.hpp"
 #include "sgrpc/scheduler.hpp"
 
 #include "detail/completion_queue_event.hpp"
-
-#include <grpcpp/grpcpp.h>
 
 #include <functional>
 

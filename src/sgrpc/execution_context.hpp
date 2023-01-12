@@ -3,7 +3,7 @@
 
 #include "detail/atomic_task_stealing_queue.hpp"
 #include "detail/completion_queue_event.hpp"
-#include "server_interface.hpp"
+#include "detail/server_interface.hpp"
 
 #include <grpcpp/completion_queue.h>
 

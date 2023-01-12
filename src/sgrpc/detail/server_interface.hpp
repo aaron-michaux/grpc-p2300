@@ -1,7 +1,7 @@
 
 #pragma once
 
-#include "detail/base_inc.hpp"
+#include "base_inc.hpp"
 
 #include <grpcpp/grpcpp.h>
 

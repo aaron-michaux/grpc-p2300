@@ -46,12 +46,11 @@ int main(int, char**)
 {
    sgrpc::ExecutionContext ctx{2, 1};
    stdexec::scheduler auto sched = sgrpc::Scheduler{ctx};
-   auto server                   = std::make_shared<Greeting::Server>();
-   auto server_handle            = Greeting::ServerHandle::build(ctx, server);
+   auto server = Greeting::ServerContainer::build(ctx, std::make_shared<Greeting::Server>());
    ctx.run();
-   fmt::print("server listening on port:{}\n", server_handle.port());
+   fmt::print("server listening on port:{}\n", server.port());
 
-   auto channel = grpc::CreateChannel(fmt::format("localhost:{}", server_handle.port()),
+   auto channel = grpc::CreateChannel(fmt::format("localhost:{}", server.port()),
                                       grpc::InsecureChannelCredentials());
    Greeting::Client client{ctx, channel}; // TODO: create with a scheduler (?)
 

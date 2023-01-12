@@ -26,11 +26,13 @@ class Server final
 /**
  * A handle to a running server listening on a specific port
  */
-class ServerHandle
+class ServerContainer
 {
  public:
-   ~ServerHandle() = default;              //!< The server shuts down when instance destructs
-   uint16_t port() const { return port_; } //!< The port the server is listening on
+   ServerContainer();
+   ~ServerContainer();    //!< The server shuts down when instance destructs
+   uint16_t port() const; //!< The port the server is listening on
+   void stop();           //!< This should return a sender; current implementation is blocking
 
    /**
     * Creates a new server (instance)
@@ -40,16 +42,16 @@ class ServerHandle
     * @param credentials The grpc credentials, if any.
     * @return The port listening on.
     */
-   static ServerHandle build(sgrpc::ExecutionContext& execution_context,
-                             std::shared_ptr<Server> server,
-                             uint32_t number_server_work_queues = 1,
-                             uint16_t port                      = 0,
-                             std::shared_ptr<grpc::ServerCredentials> credentials
-                             = grpc::InsecureServerCredentials()) noexcept(false);
+   static ServerContainer build(sgrpc::ExecutionContext& execution_context,
+                                std::shared_ptr<Server> server,
+                                uint32_t number_server_work_queues = 1,
+                                uint16_t port                      = 0,
+                                std::shared_ptr<grpc::ServerCredentials> credentials
+                                = grpc::InsecureServerCredentials()) noexcept(false);
 
  private:
-   std::shared_ptr<Server> server_;
-   uint16_t port_{0};
+   struct Impl; // Type erase the grpc code
+   std::shared_ptr<Impl> impl_;
 };
 
 } // namespace Greeting

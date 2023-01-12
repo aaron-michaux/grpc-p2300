@@ -9,10 +9,11 @@
 namespace sgrpc
 {
 
-template<typename Service, typename Server> class ServerContainer : public ServerContainerInterface
+template<typename Service, typename Server>
+class GenericServerContainer : public ServerContainerInterface
 {
  public:
-   static std::shared_ptr<ServerContainer> make(
+   static std::shared_ptr<GenericServerContainer> make(
        ExecutionContext& execution_context,
        std::shared_ptr<Server> server,
        std::function<void(Server&, Service&, Scheduler, grpc::ServerCompletionQueue& cq)> wire_rpcs,
@@ -21,7 +22,7 @@ template<typename Service, typename Server> class ServerContainer : public Serve
        std::shared_ptr<grpc::ServerCredentials> credentials
        = grpc::InsecureServerCredentials()) noexcept(false)
    {
-      auto container = std::make_shared<ServerContainer>();
+      auto container = std::make_shared<GenericServerContainer>();
       container->init(execution_context,
                       std::move(server),
                       std::move(wire_rpcs),
@@ -36,7 +37,12 @@ template<typename Service, typename Server> class ServerContainer : public Serve
       return container;
    }
 
+   //@{ Getters
    uint16_t port() const { return port_; }
+   Service& service() { return service_; }
+   Server& server() { return *server_; }
+   grpc::Server& grpc_server() { return *grpc_server_; }
+   //@}
 
    std::vector<std::unique_ptr<grpc::ServerCompletionQueue>>& get_work_queues() override
    {
