@@ -86,8 +86,8 @@ class ServerRpcHandler : public CompletionQueueEvent
 {
  private:
    enum class Status : int { Start, Finish };
-   using LogicResultType
-       = std::result_of<RpcLogic && (const grpc::ServerContext&, const RequestType&)>::type;
+   using LogicResultType =
+       typename std::result_of<RpcLogic && (const grpc::ServerContext&, const RequestType&)>::type;
 
  public:
    // Scheduler: Where to put the async computation
@@ -113,7 +113,7 @@ class ServerRpcHandler : public CompletionQueueEvent
 
    ~ServerRpcHandler() = default;
 
-   void complete(bool is_okay) override
+   void complete(bool is_okay) noexcept override
    {
       if(delete_on_next_complete_ || !is_okay) {
          delete this;
@@ -128,7 +128,14 @@ class ServerRpcHandler : public CompletionQueueEvent
          // This is "immediate-mode" logic
          constexpr bool is_executed_immediately = !stdexec::sender<LogicResultType>;
          if constexpr(is_executed_immediately) {
-            response_writer_.Finish(logic_(server_context_, request_), grpc::Status::OK, this);
+            try {
+               response_writer_.Finish(logic_(server_context_, request_), grpc::Status::OK, this);
+            } catch(...) {
+               // TODO: log here
+               response_writer_.Finish(
+                   ResponseType{}, grpc::Status{grpc::StatusCode::INTERNAL, ""}, this);
+            }
+
          } else {
             // Schedule the sender for execution
             stdexec::sender auto work

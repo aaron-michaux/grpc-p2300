@@ -41,10 +41,14 @@ template<typename ResponseType> class InflightRpc : public CompletionQueueEvent
    }
 
    // The sgrpc::ExecutionContext calls this when the rpc call completes and also deletes call_frame
-   void complete(bool is_ok) override
+   void complete(bool is_ok) noexcept override
    {
       assert(completion_);
-      completion_(is_ok, status_, response_);
+      try {
+         completion_(is_ok, status_, response_);
+      } catch(...) {
+         // TODO: log something here
+      }
       delete this;
    }
 

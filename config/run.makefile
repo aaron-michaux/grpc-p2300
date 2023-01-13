@@ -57,19 +57,19 @@ GEN_HEADERS+=$(patsubst %.proto, $(GEN_DIR)/%.grpc.pb.h, $(GRPC_PROTOS))
 
 ifeq ("$(BUILD_TESTS)", "True")
   BASE_SOURCES:=$(SOURCES)
-  SOURCES=$(filter-out src/main.cpp,$(BASE_SOURCES)) $(shell find testcases -type f -name '*.cpp' -o -name '*.cc' -o -name '*.c')  
-  CPPFLAGS+=-DTEST_BUILD
+  SOURCES+= $(shell find testcases -type f -name '*.cpp' -o -name '*.cc' -o -name '*.c')
+  ifneq ("$(COMPDB)", "True")
+    SOURCES:=$(filter-out src/main.cpp,$(SOURCES))
+  endif
   LIBS+=-lgtest -lgtest_main
 endif
 
 ifeq ("$(BUILD_EXAMPLES)", "True")
   SOURCES+= $(shell find examples  -type f -name '*.cpp' -o -name '*.cc' -o -name '*.c')
-  CPPFLAGS+=-DEXAMPLES_BUILD
 endif
 
 ifeq ("$(BENCHMARK)", "True")
   SOURCES+= $(shell find benchmark -type f -name '*.cpp' -o -name '*.cc' -o -name '*.c')
-  CPPFLAGS+=-DBENCHMARK_BUILD
   LIBS+=-lbenchmark
 endif
 

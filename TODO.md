@@ -10,8 +10,8 @@
  * Unify client and server senders... so that it all looks the same. (Can it be done?)
  * error/cancellation/chaining propagation, with void
    - How do types propagate?
- * Integrate in logging framework. (dependency injection)
  * Look at IoC container (https://github.com/ybainier/Hypodermic)
+ * Integrate in logging framework. (dependency injection)
  * gtest testcases + coverage
  * doc folder for tutorial... see rust example?
    - examples

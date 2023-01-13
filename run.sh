@@ -127,9 +127,8 @@ while [ "$#" -gt "0" ] ; do
     [ "$1" = "test" ]      && BUILD_TESTS="True"    && BUILD_EXAMPLES="True" && shift && continue
     [ "$1" = "bench" ]     && BENCHMARK="True"      && shift && continue
     [ "$1" = "examples" ]  && BUILD_EXAMPLES="True" && shift && continue
-    [ "$1" = "compdb"   ]  && COMPDB="True" \
-        && BUILD_TESTS="True" && BUILD_EXAMPLES="True" && CONFIG="debug" && TOOLCHAIN="clang" \
-        && shift && continue
+    [ "$1" = "compdb"   ]  && COMPDB="True"         && CONFIG="debug" && TOOLCHAIN="clang" \
+        && BUILD_TESTS="True"  && BUILD_EXAMPLES="True" && shift && continue
     [ "$1" = "coverage" ]  \
         && BUILD_TESTS="True"  && COVERAGE="True"  && CONFIG="debug" && shift && continue
 
@@ -159,19 +158,38 @@ export BENCHMARK="$BENCHMARK"
 export COVERAGE="$COVERAGE"
 export STDLIB="$STDLIB"
 export LTO="$LTO"
+export COMPDB="$COMPDB"
 
 if [ "$COVERAGE" = "True" ] ; then
     RULE="$([ "$TOOLCHAIN" = "gcc" ] && echo "coverage_html" || echo "llvm_coverage_html")"
 fi
 
-if [ "$COMPDB" = "True" ] && [ "$RULE" != "clean" ] ; then
+if [ "$COMPDB" = "True" ] && [ "$RULE" != "info" ] && [ "$RULE" != "clean" ] ; then
     RULE="compile_commands.json"
 fi
 
 do_make()
-{    
-    make -f "$MAKEFILE" $NPROC $RULE
-    RET="$?"
+{
+    if [ "$RULE" = "zcompile_commands.json" ] ; then        
+        make -f "$MAKEFILE" $NPROC $RULE        
+        BUILD_TESTS=True    make -f "$MAKEFILE" $NPROC $RULE
+        BUILD_EXAMPLES=True make -f "$MAKEFILE" $NPROC $RULE
+
+        # Now concatenate the different compile commands files
+        MAIN_COMPDB="$(make -f "$MAKEFILE" info | grep -E ^TARGET_DIR | awk '{ print $2 }')"
+        TEST_COMPDB="$(BUILD_TESTS=True make -f "$MAKEFILE" info | grep -E ^TARGET_DIR | awk '{ print $2 }')"
+        EXPL_COMPDB="$(BUILD_EXAMPLES=True make -f "$MAKEFILE" info | grep -E ^TARGET_DIR | awk '{ print $2 }')"
+    
+        COMPDB_FILE="$PPWD/compile_commands.json"
+        echo "[" >  "$COMPDB_FILE"
+        
+        echo "]" >> "$COMPDB_FILE"
+
+        RET="$?"
+    else
+        make -f "$MAKEFILE" $NPROC $RULE
+        RET="$?"
+    fi    
     [ "$RET" != "0" ] && exit $RET   || true
 }
 do_make
