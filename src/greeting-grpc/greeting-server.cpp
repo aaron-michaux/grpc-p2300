@@ -30,7 +30,6 @@ namespace detail
                          sgrpc::Scheduler scheduler,
                          grpc::ServerCompletionQueue& cq)
    {
-      // Let each completion queue server every RPC
       new sgrpc::ServerRpcHandler<HelloRequest, HelloReply>(
           scheduler,
           sgrpc::bind_rpc(service, &Service::RequestSayHello),
@@ -39,7 +38,7 @@ namespace detail
    }
 } // namespace detail
 
-// # -- The server container
+// # -- Type-erase the service+server using a private implementation
 
 struct ServerContainer::Impl
 {
@@ -53,6 +52,8 @@ struct ServerContainer::Impl
    std::shared_ptr<sgrpc::GenericServerContainer<Service, Server>> container_;
 };
 
+// # -- The server container, for building and managing a live server
+
 ServerContainer::ServerContainer()
     : impl_{std::make_shared<Impl>()}
 {}
@@ -60,7 +61,7 @@ ServerContainer::~ServerContainer() { stop(); }
 uint16_t ServerContainer::port() const { return impl_->port(); }
 void ServerContainer::stop() { impl_->stop(); }
 
-// # -- Build the server-handle
+// # -- Building the server
 
 ServerContainer
 ServerContainer::build(sgrpc::ExecutionContext& execution_context,
