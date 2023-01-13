@@ -24,7 +24,7 @@ class Server final
 };
 
 /**
- * A handle to a running server listening on a specific port
+ * Build and handle a running server listening on a specific port
  */
 class ServerContainer
 {

@@ -82,10 +82,12 @@ template<typename RequestType,
          typename ResponseType,
          typename BindRequest = BindRpcRequestFunction<RequestType, ResponseType>,
          typename RpcLogic    = RpcLogicThunk<RequestType, ResponseType>>
-class ServerRpcContext : public CompletionQueueEvent
+class ServerRpcHandler : public CompletionQueueEvent
 {
  private:
    enum class Status : int { Start, Finish };
+   using LogicResultType
+       = std::result_of<RpcLogic && (const grpc::ServerContext&, const RequestType&)>::type;
 
  public:
    // Scheduler: Where to put the async computation
@@ -94,7 +96,7 @@ class ServerRpcContext : public CompletionQueueEvent
    // Conversion Functions: Convert RPC types to/from application types
    // CompletionQueue: Used by grpc to process events
 
-   ServerRpcContext(Scheduler scheduler,
+   ServerRpcHandler(Scheduler scheduler,
                     BindRequest bind_request,
                     RpcLogic logic,
                     grpc::ServerCompletionQueue& cq)
@@ -104,46 +106,49 @@ class ServerRpcContext : public CompletionQueueEvent
        , cq_{cq}
        , response_writer_{&server_context_}
    {
-      // Bind the request to the passed completion queue
-      // Note: `this`'s lifecycle now controlled by the completion queue
+      // Bind the request (this object) to completion queue `cq`.
+      // Note: `this` lifecycle now controlled by the completion queue
       bind_request_(&server_context_, &request_, &response_writer_, &cq_, &cq_, this);
    }
 
-   ~ServerRpcContext() = default;
+   ~ServerRpcHandler() = default;
 
    void complete(bool is_okay) override
    {
       if(delete_on_next_complete_ || !is_okay) {
          delete this;
+
       } else {
          // Spawn a new RpcCallContext to service incoming requests
-         new ServerRpcContext{scheduler_, bind_request_, logic_, cq_};
+         new ServerRpcHandler{scheduler_, bind_request_, logic_, cq_};
 
          // Will delete on next call to `proceed`
          delete_on_next_complete_ = true;
 
-         response_writer_.Finish(logic_(server_context_, request_), grpc::Status::OK, this);
+         // This is "immediate-mode" logic
+         constexpr bool is_executed_immediately = !stdexec::sender<LogicResultType>;
+         if constexpr(is_executed_immediately) {
+            response_writer_.Finish(logic_(server_context_, request_), grpc::Status::OK, this);
+         } else {
+            // Schedule the sender for execution
+            stdexec::sender auto work
+                = stdexec::schedule(scheduler_)       // Execute on execution_context
+                  | logic_(server_context_, request_) // The specified logic
+                  | stdexec::then([this](const ResponseType& response) { // Write response
+                       response_writer_.Finish(response, grpc::Status::OK, this);
+                    })
+                  | stdexec::upon_error([this](auto... arg) { // Handle errors
+                       // auto status = grpc::Status{
+                       //     detail::to_grpc_status_code(status.error_code()),
+                       //     std::string{std::cbegin(status.details()),
+                       //     std::cend(status.details())}};
+                       auto grpc_status = grpc::Status{grpc::StatusCode::UNKNOWN, "TBA"};
+                       response_writer_.Finish(ResponseType{}, grpc_status, this);
+                    });
 
-         // We need "immediate" (non-block) and "scheduled" (async)
-         // RpcLogic
-
-         // Spawn the service logic
-         // stdexec::sender auto sender
-         //     = stdexec::schedule(scheduler_)       // Execute on execution_context
-         //       | logic_(server_context_, request_) // The specified logic
-         //       | stdexec::then([this](const ResponseType& response) { // Write response
-         //            response_writer_.Finish(response, grpc::Status::OK, this);
-         //         })
-         // | stdexec::upon_error([this](const RpcStatus& status) {
-         //      response_writer_.Finish(
-         //          ResponseType{},
-         //          grpc::Status{detail::to_grpc_status_code(status.error_coode()),
-         //                       std::string{std::cbegin(status.details()),
-         //                                   std::cend(status.details())}},
-         //          this);
-         //   }) //
-         //;
-         // stdexec::start_detached(sender);
+            // Action!
+            stdexec::start_detached(work);
+         }
       }
    }
 

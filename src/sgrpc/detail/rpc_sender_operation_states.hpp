@@ -148,17 +148,17 @@ struct CallData
 /**
  * Operation State for a type-erased RPC Sender
  */
-template<typename Receiver, typename ResultType> struct RpcSenderOpState
+template<typename ReceiverType, typename ResultType> struct RpcSenderOpState
 {
    static constexpr bool IsVoidResultType = std::is_same<ResultType, void>::value;
 
    ExecutionContext& context_;
    WrappedRpcFactory<ResultType> call_factory_;
-   [[no_unique_address]] Receiver receiver_;
+   [[no_unique_address]] ReceiverType receiver_;
 
    RpcSenderOpState(ExecutionContext& context,
                     WrappedRpcFactory<ResultType>&& call_factory,
-                    Receiver&& receiver)
+                    ReceiverType&& receiver)
        : context_{context}
        , call_factory_{std::move(call_factory)}
        , receiver_{std::move(receiver)}

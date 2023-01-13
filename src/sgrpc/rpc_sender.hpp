@@ -90,6 +90,9 @@ template<typename ResultType> class ClientRpcSender
    using completion_signatures = stdexec::completion_signatures<stdexec::set_value_t(ResultType),
                                                                 stdexec::set_error_t(RpcStatus)>;
 
+   /**
+    * TODO: should execution-context be replaced with scheduler?
+    */
    ClientRpcSender(ExecutionContext& context, WrappedRpcFactory<ResultType> call_factory)
        : context_{context}
        , call_factory_{std::move(call_factory)}
